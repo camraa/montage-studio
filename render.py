@@ -338,7 +338,74 @@ def render_card(rc, card, out, kind, final=False):
          *video_args(rc, kind), *AUDIO, "-shortest", out])
 
 
-def render_segment(rc, video, info, seg, out, kind, progress=None):
+# ------------------------------------------------------------------ compteur en direct (kills / points)
+def counter_png(rc, parts, hot, path):
+    """Bandeau du haut : [PARTIE 2/10]  [3 KILLS]  [23 PTS] ; hot = le compteur de kills vient de bouger."""
+    W, H = rc["width"], rc["height"]
+    u = H / 1080
+    img = Image.new("RGBA", (W, int(110 * u)), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    f = _font(rc, int(40 * u), "label")
+    gap, padx = int(34 * u), int(26 * u)
+    widths = [d.textlength(t, font=f) for t, _ in parts]
+    total = sum(widths) + gap * (len(parts) - 1) + padx * 2
+    x0, y0, y1 = (W - total) / 2, int(18 * u), int(84 * u)
+    d.rounded_rectangle([x0, y0, x0 + total, y1], int(16 * u), fill=(8, 12, 36, 190),
+                        outline=(255, 205, 40, 230) if hot else (255, 255, 255, 60), width=max(2, int(3 * u)))
+    x = x0 + padx
+    for (t, col), w in zip(parts, widths):
+        c = ACCENT if (hot and col == "kills") else {"kills": WHITE, "pts": ACCENT, "rank": GREEN}.get(col, GREY)
+        d.text((x, (y0 + y1) / 2), t, font=f, fill=c, anchor="lm", stroke_width=max(1, int(2 * u)), stroke_fill=(8, 12, 36))
+        x += w + gap
+    img.save(path)
+
+
+def counter_stream(rc, counter, seg, folder):
+    """Liste concat (images + durées) du compteur pour un morceau de gameplay."""
+    s, e = seg["start"], seg["end"]
+    kills = sorted(counter.get("kills", []))
+    events = sorted({t for t in kills if s < t < e} | {t + 1.5 for t in kills if s < t + 1.5 < e})
+    cuts = [s] + events + [e]
+    folder.mkdir(parents=True, exist_ok=True)
+    cache, entries = {}, []
+    for a, b in zip(cuts[:-1], cuts[1:]):
+        if b - a < 0.02:
+            continue
+        n = sum(1 for t in kills if t <= a + 1e-3)
+        hot = any(t <= a + 1e-3 < t + 1.5 for t in kills)
+        parts = [(counter["label"], "label"), (f"{n} KILL{'S' if n > 1 else ''}", "kills")]
+        if counter.get("points") is not None:
+            parts.append((f"{counter['points']} PTS", "pts"))
+        if counter.get("rank"):
+            parts.append((counter["rank"], "rank"))
+        key = (tuple(parts), hot)
+        if key not in cache:
+            cache[key] = folder / f"c{len(cache):03d}.png"
+            counter_png(rc, parts, hot, cache[key])
+        entries.append((cache[key], b - a))
+    lst = folder / "counter.txt"
+    lines = []
+    for p, dur in entries:
+        lines += [f"file '{p.as_posix()}'", f"duration {dur:.3f}"]
+    lines.append(f"file '{entries[-1][0].as_posix()}'")
+    lst.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return lst
+
+
+def render_segment(rc, video, info, seg, out, kind, progress=None, counter=None):
+    if counter and rc.get("live_counter", True):
+        lst = counter_stream(rc, counter, seg, out.parent / f"{out.stem}_counter")
+        modes = ["cuda", "download"] if kind == "nvenc" else ["cpu"]
+        for m in modes:
+            try:
+                return _render_segment(rc, video, info, seg, out, kind, progress, lst, m)
+            except SystemExit:
+                print(f"\n[COMPTEUR] méthode « {m} » refusée par ffmpeg, essai suivant…", flush=True)
+        print("[COMPTEUR] incrustation impossible sur ce PC -> morceau rendu sans compteur", flush=True)
+    return _render_segment(rc, video, info, seg, out, kind, progress)
+
+
+def _render_segment(rc, video, info, seg, out, kind, progress=None, counter_list=None, how=None):
     s, d = seg["start"], seg["end"] - seg["start"]
     cmd = [need("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y"]
     same_size = (info["width"], info["height"]) == (rc["width"], rc["height"])
@@ -350,9 +417,27 @@ def render_segment(rc, video, info, seg, out, kind, progress=None):
     cmd += ["-ss", f"{s:.3f}", "-i", video]
     if not info["has_audio"]:
         cmd += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
-    cmd += ["-t", f"{d:.3f}", "-map", "0:v:0",
+    vmap = ["-vf", vf, "-map", "0:v:0"]
+    if counter_list:
+        ci = 1 if info["has_audio"] else 2
+        cmd += ["-f", "concat", "-safe", "0", "-i", counter_list]
+        fps = rc["fps"]
+        if how == "cuda":            # tout reste sur la carte graphique
+            main = ("[0:v]" + f"scale_cuda={rc['width']}:{rc['height']}:interp_algo=lanczos:format=yuv420p," +
+                    f"fps={fps}[m]")
+            fc = (f"{main};[{ci}:v]fps={fps},format=yuva420p,hwupload_cuda[o];"
+                  "[m][o]overlay_cuda=x=0:y=0:eof_action=pass[v]")
+        elif how == "download":      # mise à l'échelle sur la carte, incrustation sur le processeur
+            sc = "" if (info["width"], info["height"]) == (rc["width"], rc["height"]) else \
+                f"scale_cuda={rc['width']}:{rc['height']}:interp_algo=lanczos,"
+            fc = (f"[0:v]{sc}fps={fps},hwdownload,format=nv12[m];[{ci}:v]fps={fps},format=rgba[o];"
+                  "[m][o]overlay=0:0:eof_action=pass,format=nv12[v]")
+        else:
+            fc = f"[0:v]{vf}[m];[{ci}:v]fps={fps},format=rgba[o];[m][o]overlay=0:0:eof_action=pass,format={pix_fmt(kind)}[v]"
+        vmap = ["-filter_complex", fc, "-map", "[v]"]
+    cmd += ["-t", f"{d:.3f}", *vmap,
             "-map", f"0:a:{rc['audio_stream']}" if info["has_audio"] else "1:a",
-            "-vf", vf, *video_args(rc, kind), *AUDIO, out]
+            *video_args(rc, kind), *AUDIO, out]
     run(cmd, duration=d, label=out.stem, progress=progress)
 
 
@@ -554,6 +639,31 @@ def duration_of(path):
     return 0.0 if DRY else ffprobe_info(path)["duration"]
 
 
+def counter_data(cfg, plan):
+    """Par partie : libellé (PARTIE 2/10, GAME 3...), instants des kills, points avant la partie, rang."""
+    if not cfg["render"].get("live_counter", True):
+        return {}
+    try:
+        tl = json.loads((work_dir(cfg) / "timeline.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    by_game = {g["game"]: g for g in tl.get("games", [])}
+    out = {}
+    for g in plan["games"]:
+        t = by_game.get(g["game"], {})
+        c = g["card"]
+        if c.get("type") == "cup":
+            label = f"PARTIE {g['game']}/{c.get('cup_games') or '?'}"
+        elif c.get("type") == "box":
+            label = f"MATCH {g['game']}"
+        else:
+            label = f"GAME {g['game']}"
+        rank = (t.get("rank_before") or {}).get("name") if c.get("type") == "ranked" else None
+        out[g["game"]] = {"label": label, "kills": [k["t"] for k in t.get("kills", [])],
+                          "points": c.get("points") if c.get("type") == "cup" else None, "rank": rank}
+    return out
+
+
 def render(cfg, cpu=False, reencode_final=False):
     from common import detect_encoder
     kind = "x264" if cpu else detect_encoder()
@@ -572,6 +682,7 @@ def render(cfg, cpu=False, reencode_final=False):
     for old in list(clips_dir.glob("*.mp4")) + list(clips_dir.glob("*.wav")):
         old.unlink()
 
+    counters = counter_data(cfg, plan)
     clips, jobs = [], []
     for gi, g in enumerate(plan["games"]):
         card = clips_dir / f"{gi:02d}_card.mp4"
@@ -579,7 +690,7 @@ def render(cfg, cpu=False, reencode_final=False):
         clips.append(card)
         for j, seg in enumerate(g["segments"]):
             out = clips_dir / f"{gi:02d}_partie{g['game']:02d}_s{j:02d}.mp4"
-            jobs.append((seg, out))
+            jobs.append((seg, out, counters.get(g["game"])))
             clips.append(out)
     if plan.get("final"):
         fc = clips_dir / "99_final_card.mp4"
@@ -588,7 +699,7 @@ def render(cfg, cpu=False, reencode_final=False):
 
     # encodage des segments en parallèle : 1 encodage par puce NVENC (la 5070 Ti en a 2)
     workers = max(1, int(rc.get("parallel_encodes", 2))) if kind == "nvenc" else 1
-    total_s = sum(seg["end"] - seg["start"] for seg, _ in jobs)
+    total_s = sum(seg["end"] - seg["start"] for seg, _, _ in jobs)
     prog, lock = {}, threading.Lock()
     t0, last = time.time(), [0.0]
 
@@ -606,12 +717,12 @@ def render(cfg, cpu=False, reencode_final=False):
               f"reste {int(eta // 3600)}:{int(eta % 3600 // 60):02d}:{int(eta % 60):02d}  "
               f"({len(jobs)} morceaux, {workers} en parallèle)   ", end="", flush=True)
 
-    def job(seg, out):
+    def job(seg, out, counter):
         def cb(done):
             with lock:
                 prog[out] = min(done, seg["end"] - seg["start"])
                 show()
-        render_segment(rc, video, info, seg, out, kind, progress=cb)
+        render_segment(rc, video, info, seg, out, kind, progress=cb, counter=counter)
         with lock:
             prog[out] = seg["end"] - seg["start"]
             show(force=True)
@@ -619,7 +730,7 @@ def render(cfg, cpu=False, reencode_final=False):
     print(f"[RENDU] {len(jobs)} morceaux de gameplay ({fmt_tc(total_s)[:8]}) - {workers} encodages en parallèle")
     order = sorted(jobs, key=lambda j: j[0]["start"] - j[0]["end"])   # les plus longs d'abord
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = [ex.submit(job, seg, out) for seg, out in order]
+        futures = [ex.submit(job, seg, out, ctr) for seg, out, ctr in order]
         for f in futures:
             f.result()          # remonte une éventuelle erreur ffmpeg
     print()

@@ -490,6 +490,7 @@ function renderRenderTab() {
     ${field("Images / s", `<select data-s="render.fps"><option ${r.fps == 60 ? "selected" : ""}>60</option><option ${r.fps == 30 ? "selected" : ""}>30</option></select>`)}
     ${field("Débit vidéo", `<input data-s="render.bitrate" value="${r.bitrate}">`)}
     ${field("Encodages parallèles", `<input data-s="render.parallel_encodes" type="number" min="1" max="3" value="${r.parallel_encodes}">`)}
+    ${field("Compteur en direct", `<label class="switch"><input data-s="render.live_counter" type="checkbox" ${r.live_counter !== false ? "checked" : ""}><i></i><span>partie, kills, points</span></label>`)}
     <h4>Musique</h4>
     ${field("Volume (calme)", `<input data-s="render.music_volume" type="range" min="0" max="1" step="0.05" value="${r.music_volume}">`)}
     ${field("Baisse sous ta voix", `<input data-s="render.duck_max_db" type="range" min="0" max="40" step="1" value="${r.duck_max_db}">`)}
