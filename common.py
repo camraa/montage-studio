@@ -100,6 +100,10 @@ DEFAULT_CONFIG = {
         "outro_s": 15,
         "music_volume": 0.55,         # volume quand il n'y a PAS de son d'origine (cartons, silences)
         "music_tail_s": 14,           # la musique d'un carton déborde de X s sur le début de la game
+        "endgame_music": True,        # Cup : musique stressante sur la fin de chaque partie (musiques/fin_de_zone)
+        "endgame_music_s": 120,       # durée de cette musique avant la fin de la partie
+        "endgame_volume": 0.35,       # son volume (plus bas que les cartons)
+        "endgame_duck_db": 9,         # baisse max sous ta voix / les tirs (plus doux : le combat est permanent)
         "music_fade_s": 6,
         "duck_threshold_db": -45,     # au-dessus de ce niveau de son d'origine, la musique baisse
         "duck_slope": 1.0,            # dB de baisse par dB de son au-dessus du seuil

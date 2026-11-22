@@ -430,6 +430,44 @@ def music_bed(cfg, clips, total, cmd, plan=None):
         cmd += ["-i", wav]
         pieces.append(f"[{idx}:a]adelay={ms}|{ms}[m{idx}]")
         idx += 1
+    # ---- musique de fin de zone (Cup) : ambiance stressante sur les dernières minutes de chaque partie
+    tension = sorted(p for d in (ASSET_DIR / "musiques" / "fin_de_zone", DATA_DIR / "musiques" / "fin_de_zone")
+                     if d.exists() for p in d.glob("*") if p.suffix.lower() in MUSIC_EXT)
+    if (plan or {}).get("mode") == "cup" and rc.get("endgame_music", True) and tension:
+        rng.shuffle(tension)
+        games_end = {}
+        for c, st, d in starts:
+            if "_partie" in c.name:
+                gi = c.name[:2]
+                g0, _, kept = games_end.get(gi, (st, 0, 0.0))
+                games_end[gi] = (g0, st + d, kept + d)
+        L0 = float(rc.get("endgame_music_s", 120))
+        rc_e = dict(rc, duck_max_db=rc.get("endgame_duck_db", 9))
+        for k_, (gi, (g0, end, kept)) in enumerate(sorted(games_end.items())):
+            if kept < L0 + 30:                     # partie trop courte (élimination rapide) : pas de stress
+                continue
+            st = end - L0
+            m = _decode(tension[k_ % len(tension)], SR, 2, dur=L0, loop=True)
+            if len(m) == 0:
+                continue
+            n = len(m)
+            tt = np.arange(n) / SR
+            envl = np.minimum(1, tt / 4.0) * np.clip((L0 - tt) / 1.5, 0, 1)
+            key = _decode(lst, KSR, 1, start=st, dur=L0, concat=True)
+            g = duck_gain(key, KSR, n, rc_e) if len(key) else np.ones(n)
+            m = m * (rc.get("endgame_volume", 0.35) * envl * g)[:, None]
+            wav = clips[0].parent / f"music_{idx:02d}.wav"
+            import wave
+            with wave.open(str(wav), "wb") as w:
+                w.setnchannels(2)
+                w.setsampwidth(2)
+                w.setframerate(SR)
+                w.writeframes((np.clip(m, -1, 1) * 32767).astype("<i2").tobytes())
+            ms = int(st * 1000)
+            cmd += ["-i", wav]
+            pieces.append(f"[{idx}:a]adelay={ms}|{ms}[m{idx}]")
+            idx += 1
+            print(f"[MUSIQUE] fin de zone : partie {int(gi)} ({tension[k_ % len(tension)].stem})")
     if not pieces:
         return [], 1
     labels = "[0:a]" + "".join(f"[m{j}]" for j in range(1, idx))
