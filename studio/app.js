@@ -494,6 +494,9 @@ function renderRenderTab() {
     ${field("Volume (calme)", `<input data-s="render.music_volume" type="range" min="0" max="1" step="0.05" value="${r.music_volume}">`)}
     ${field("Baisse sous ta voix", `<input data-s="render.duck_max_db" type="range" min="0" max="40" step="1" value="${r.duck_max_db}">`)}
     ${field("Débord sur la game", `<input data-s="render.music_tail_s" type="number" value="${r.music_tail_s}"> `)}
+    ${field("Fin de zone (Cup)", `<label class="switch"><input data-s="render.endgame_music" type="checkbox" ${r.endgame_music !== false ? "checked" : ""}><i></i><span>musique stressante</span></label>`)}
+    ${field("Durée fin de zone (s)", `<input data-s="render.endgame_music_s" type="number" min="30" max="300" value="${r.endgame_music_s ?? 120}">`)}
+    ${field("Volume fin de zone", `<input data-s="render.endgame_volume" type="range" min="0" max="1" step="0.05" value="${r.endgame_volume ?? 0.35}">`)}
     <h4>Montage auto</h4>
     ${field("Bus coupé (s)", `<input data-s="edit.bus_skip_s" type="number" value="${e.bus_skip_s}">`)}
     ${field("Creux coupé après (s)", `<input data-s="edit.dead_gap_s" type="number" value="${e.dead_gap_s}">`)}
@@ -511,7 +514,8 @@ function renderRenderTab() {
       body.render.maxrate = { 1080: "24M", 1440: "40M", 2160: "60M" }[h];
     } else {
       const [sec, key] = k.split(".");
-      body[sec][key] = i.type === "range" || i.type === "number" || key === "fps" ? Number(i.value) : i.value;
+      body[sec][key] = i.type === "checkbox" ? i.checked
+        : i.type === "range" || i.type === "number" || key === "fps" ? Number(i.value) : i.value;
     }
     S.settings = await api("/api/settings", body);
     renderRenderTab(); updateStats();
