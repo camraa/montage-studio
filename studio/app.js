@@ -497,6 +497,14 @@ function renderRenderTab() {
     ${field("Fin de zone (Cup)", `<label class="switch"><input data-s="render.endgame_music" type="checkbox" ${r.endgame_music !== false ? "checked" : ""}><i></i><span>musique stressante</span></label>`)}
     ${field("Durée fin de zone (s)", `<input data-s="render.endgame_music_s" type="number" min="30" max="300" value="${r.endgame_music_s ?? 120}">`)}
     ${field("Volume fin de zone", `<input data-s="render.endgame_volume" type="range" min="0" max="1" step="0.05" value="${r.endgame_volume ?? 0.35}">`)}
+    <h4>Shorts TikTok</h4>
+    ${field("Nombre par rec", `<input data-s="render.shorts_count" type="number" min="1" max="10" value="${r.shorts_count ?? 3}">`)}
+    ${field("Mise en page", `<select data-s="render.shorts_layout"><option value="cadre" ${r.shorts_layout !== "plein" ? "selected" : ""}>Gameplay agrandi + fond flouté</option><option value="plein" ${r.shorts_layout === "plein" ? "selected" : ""}>Plein écran (bords coupés)</option></select>`)}
+    ${field("Sous-titres", `<label class="switch"><input data-s="render.shorts_captions" type="checkbox" ${r.shorts_captions !== false ? "checked" : ""}><i></i><span>ta voix, mot par mot</span></label>`)}
+    <button class="btn" data-cmd="shorts" style="margin:4px 0 0 136px">Créer les Shorts</button>
+    <h4>Sous-titres YouTube</h4>
+    ${field("Fichier .srt", `<label class="switch"><input data-s="render.subtitles_srt" type="checkbox" ${r.subtitles_srt ? "checked" : ""}><i></i><span>à côté du montage</span></label>`)}
+    ${field("Précision", `<select data-s="render.whisper_model"><option value="base" ${r.whisper_model === "base" ? "selected" : ""}>Rapide</option><option value="small" ${(r.whisper_model || "small") === "small" ? "selected" : ""}>Conseillée</option><option value="medium" ${r.whisper_model === "medium" ? "selected" : ""}>Max (plus lent)</option></select>`)}
     <h4>Montage auto</h4>
     ${field("Bus coupé (s)", `<input data-s="edit.bus_skip_s" type="number" value="${e.bus_skip_s}">`)}
     ${field("Creux coupé après (s)", `<input data-s="edit.dead_gap_s" type="number" value="${e.dead_gap_s}">`)}
@@ -655,7 +663,7 @@ const CMDS = {
   "open-videos": () => api("/api/open", {}),
   "open-thumbs": () => api("/api/open", { folder: "thumbs" }),
   "scan": () => startJob("scan"), "rescan": () => startJob("rescan"), "all": () => startJob("all"),
-  "render": () => startJob("render"), "proxy": () => startJob("proxy"),
+  "render": () => startJob("render"), "proxy": () => startJob("proxy"), "shorts": () => startJob("shorts"),
   "save": () => savePlan().then(() => status("Montage enregistré")),
   "reset": async () => {
     if (!S.cur || !confirm("Remplacer le montage par le montage automatique ? (tes retouches seront perdues)")) return;
