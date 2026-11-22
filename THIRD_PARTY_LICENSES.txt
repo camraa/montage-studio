@@ -1,0 +1,21 @@
+Composants tiers inclus dans Montage Studio
+===========================================
+
+FFmpeg (ffmpeg.exe, ffprobe.exe) - GNU GPL v3 (build "full" de gyan.dev) - https://ffmpeg.org
+  Programmes séparés appelés en ligne de commande. Code source : https://ffmpeg.org/download.html
+  et https://www.gyan.dev/ffmpeg/builds/
+Python - Python Software Foundation License - https://www.python.org
+PyTorch - BSD 3-Clause - https://pytorch.org
+  Inclut des bibliothèques NVIDIA CUDA redistribuables (NVIDIA CUDA Toolkit EULA).
+EasyOCR - Apache License 2.0 - https://github.com/JaidedAI/EasyOCR
+OpenCV - Apache License 2.0 - https://opencv.org
+NumPy, SciPy, scikit-image - BSD - https://numpy.org https://scipy.org https://scikit-image.org
+Pillow - MIT-CMU (HPND) - https://python-pillow.org
+pywebview - BSD 3-Clause - https://pywebview.flowrl.com
+cryptography - Apache 2.0 / BSD - https://cryptography.io
+Police "Luckiest Guy" (Astigmatic) - Apache License 2.0 - voir polices/LuckiestGuy_LICENCE.txt
+Police "Anton" (Vernon Adams) - SIL Open Font License 1.1 - voir polices/Anton_LICENCE.txt
+Police "Inter" (The Inter Project Authors) - SIL Open Font License 1.1 - voir studio/fonts/Inter_LICENCE.txt
+
+Musiques intégrées (intro, outro, lofi, synthwave, trap, house, epic) : compositions originales
+générées par code pour Montage Studio, utilisables librement dans tes vidéos.
