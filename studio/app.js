@@ -573,6 +573,7 @@ function setView(v) {
   $$("#view-tabs button[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === v));
   $$(".view").forEach(x => x.classList.toggle("active", x.id === "view-" + v));
   if (v === "card") refreshCard();
+  if (v === "banners") loadBanners();
 }
 function setTab(t) {
   $$("#right-tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
@@ -713,7 +714,7 @@ const CMDS = {
   "prev-seg": () => { const t = player().currentTime, s = allSegs().filter(x => x.start < t - 0.5).pop(); if (s) seek(s.start); },
   "zoom-in": () => setZoom(+$("#zoom").value + 12), "zoom-out": () => setZoom(+$("#zoom").value - 12),
   "zoom-fit": () => { fitZoom(); renderTimeline(); },
-  "view-video": () => setView("video"), "view-card": () => setView("card"), "view-thumbs": () => setView("thumbs"),
+  "view-video": () => setView("video"), "view-card": () => setView("card"), "view-thumbs": () => setView("thumbs"), "view-banners": () => setView("banners"),
   "tab-queue": () => setTab("queue"),
   "th-generate": genThumbs,
   "th-add-time": () => { S.thTimes.push(player().currentTime); renderThumbGrid(); },
@@ -738,6 +739,113 @@ const CMDS = {
 };
 
 function renderAll() { renderTimeline(); renderProps(); updateStats(); }
+
+/* ================= studio de bannières ================= */
+const BN = { info: null, tid: null, values: {}, skins: [], bg: "theme", timer: null, seq: 0 };
+const bnTpl = () => BN.info && BN.info.templates.find(t => t.id === BN.tid);
+async function loadBanners() {
+  const q = S.cur ? `?path=${encodeURIComponent(S.cur.path)}&mode=${S.cur.mode}` : "";
+  BN.info = await api("/api/banners" + q);
+  const sel = $("#bn-template");
+  const groups = {};
+  BN.info.templates.forEach(t => (groups[t.format] = groups[t.format] || []).push(t));
+  sel.innerHTML = Object.entries(groups).map(([g, ts]) =>
+    `<optgroup label="${g}">${ts.map(t => `<option value="${t.id}">${t.label}</option>`).join("")}</optgroup>`).join("");
+  if (!BN.tid || !bnTpl()) BN.tid = BN.info.templates[0].id;
+  sel.value = BN.tid;
+  sel.onchange = () => { BN.tid = sel.value; renderBnFields(); renderBnSkins(); bnPreview(); };
+  // valeurs auto (points, rangs du rec ouvert) : remplacent celles d'un autre rec
+  const proj = S.cur ? S.cur.path : "";
+  if (BN.proj !== proj) { BN.proj = proj; for (const k of ["points", "rang_depart", "rang_actuel", "objectif", "progression", "gain", "theme"]) delete BN.values[k]; }
+  BN.skins = BN.skins.filter(p => BN.info.skins.some(s => s.path === p));
+  renderBnFields(); renderBnSkins(); bnPreview();
+}
+function renderBnFields() {
+  const t = bnTpl();
+  $("#bn-fields").innerHTML = t.fields.map(f => {
+    const v = BN.values[f.key] ?? f.default ?? "";
+    let input;
+    if (f.type === "select") {
+      const labels = f.key === "theme" ? BN.info.themes : null;
+      input = `<select data-bn="${f.key}">${f.options.map(o => `<option value="${o}" ${String(o) === String(v) ? "selected" : ""}>${labels ? labels[o] : o}</option>`).join("")}</select>`;
+    } else {
+      input = `<input data-bn="${f.key}" ${f.type === "number" ? 'type="number"' : ""} value="${String(v).replace(/"/g, "&quot;")}">`;
+    }
+    return `<div class="bn-row"><label>${f.label}</label>${input}</div>`;
+  }).join("");
+  $$("[data-bn]", $("#bn-fields")).forEach(i => i.addEventListener("input", () => {
+    BN.values[i.dataset.bn] = i.value;
+    clearTimeout(BN.timer); BN.timer = setTimeout(bnPreview, 350);
+  }));
+}
+function renderBnSkins() {
+  const t = bnTpl(), box = $("#bn-skins");
+  $("#bn-skin-hint").textContent = t.skins ? `ce modèle en utilise ${t.skins}` : "pas de skin sur ce modèle";
+  if (!BN.info.skins.length) { box.innerHTML = `<div class="bn-empty">Aucun skin pour l'instant.</div>`; return; }
+  box.innerHTML = BN.info.skins.map(s => {
+    const n = BN.skins.indexOf(s.path);
+    return `<div class="bn-skin ${n >= 0 ? "sel" : ""}" data-p="${s.path.replace(/"/g, "&quot;")}" style="background-image:url('${s.url}')" title="${s.name}">
+      ${n >= 0 ? `<span class="n">${n + 1}</span>` : ""}<button class="x" title="Supprimer">✕</button></div>`;
+  }).join("");
+  $$(".bn-skin", box).forEach(el => {
+    el.onclick = (e) => {
+      const p = el.dataset.p;
+      if (e.target.classList.contains("x")) {
+        return api("/api/banner/skin_delete", { path: p }).then(() => { BN.skins = BN.skins.filter(x => x !== p); loadBanners(); });
+      }
+      if (BN.skins.includes(p)) BN.skins = BN.skins.filter(x => x !== p);
+      else { BN.skins.push(p); while (BN.skins.length > Math.max(1, t.skins)) BN.skins.shift(); }
+      renderBnSkins(); bnPreview();
+    };
+  });
+}
+function bnPayload() {
+  const values = {};
+  bnTpl().fields.forEach(f => { values[f.key] = BN.values[f.key] ?? f.default; });
+  return { id: BN.tid, values, skins: BN.skins, bg: BN.bg,
+    path: S.cur ? S.cur.path : null, t: S.cur ? player().currentTime : 0 };
+}
+async function bnPreview() {
+  if (!BN.info) return;
+  const seq = ++BN.seq, wrap = $(".bn-preview");
+  wrap.classList.add("loading");
+  try {
+    const r = await api("/api/banner/render", bnPayload());
+    if (seq !== BN.seq) return;
+    $("#bn-img").src = r.url; $("#bn-msg").classList.add("hidden");
+    const t = bnTpl();
+    $("#bn-info").textContent = `${t.label} • ${r.size[0]} × ${r.size[1]}`;
+  } catch (e) { status("Bannière : " + e.message); }
+  finally { if (seq === BN.seq) wrap.classList.remove("loading"); }
+}
+$$("#bn-bg button").forEach(b => b.onclick = () => {
+  if (b.dataset.bg === "frame" && !S.cur) return status("Ouvre un rec pour utiliser une de ses images en fond");
+  BN.bg = b.dataset.bg;
+  $$("#bn-bg button").forEach(x => x.classList.toggle("active", x === b));
+  bnPreview();
+});
+CMDS["bn-export"] = async () => {
+  const r = await api("/api/banner/export", bnPayload());
+  status("Exporté : " + r.saved);
+  modal(`<h3>Bannière exportée</h3><p class="muted" style="word-break:break-all">${r.saved}</p>
+    <button class="btn" id="bn-open">Afficher dans le dossier</button>`);
+  $("#bn-open").onclick = () => api("/api/open", { path: r.saved });
+};
+CMDS["bn-cutout"] = async () => {
+  if (!S.cur) return status("Ouvre d'abord un rec et place le curseur sur ton skin");
+  status("Détourage du skin… (quelques secondes, plus long la 1re fois)");
+  const r = await api("/api/banner/cutout", { path: S.cur.path, t: player().currentTime });
+  if (!r.ok) return modal(`<h3>Détourage impossible</h3><p>${r.message}</p>`);
+  BN.skins = [r.skin.path, ...BN.skins.filter(p => p !== r.skin.path)].slice(0, Math.max(1, bnTpl().skins));
+  status("Skin détouré et ajouté");
+  loadBanners();
+};
+CMDS["bn-skin-folder"] = () => api("/api/open", { path: BN.info.skin_dir });
+CMDS["bn-assets"] = () => modal(`<h3>Tes icônes de rangs et de cups</h3>
+  <p>Dépose tes images PNG (fond transparent) dans ces dossiers. Elles remplacent automatiquement les badges dessinés par l'app.</p>
+  <p class="muted"><b>rangs\\</b> : un fichier par rang, nommé <b>bronze.png</b>, <b>argent.png</b>, <b>or.png</b>, <b>platine.png</b>,
+  <b>diamant.png</b>, <b>elite.png</b>, <b>champion.png</b>, <b>unreal.png</b>.<br><b>cups\\</b> : l'icône de cup à utiliser à la place du trophée.</p>
+  <button class="btn" id="bn-open-assets">Ouvrir le dossier</button>`) || ($("#bn-open-assets").onclick = () => api("/api/open", { path: BN.info.assets_dir }));
 
 /* ================= fenêtre façon macOS ================= */
 const winApi = () => (window.pywebview && window.pywebview.api && window.pywebview.api.win_close) ? window.pywebview.api : null;
@@ -800,7 +908,7 @@ document.addEventListener("keydown", e => {
   if (k === "ArrowLeft") return seek(player().currentTime - (e.shiftKey ? 5 : 1));
   if (k === "ArrowRight") return seek(player().currentTime + (e.shiftKey ? 5 : 1));
   const map = { s: "split", S: "split", Delete: "delete", Backspace: "delete", a: "add", A: "add", "+": "zoom-in", "=": "zoom-in",
-    "-": "zoom-out", "0": "zoom-fit", "1": "view-video", "2": "view-card", "3": "view-thumbs", F5: "refresh" };
+    "-": "zoom-out", "0": "zoom-fit", "1": "view-video", "2": "view-card", "3": "view-thumbs", "4": "view-banners", F5: "refresh" };
   if (map[k]) { e.preventDefault(); CMDS[map[k]](); }
 });
 window.addEventListener("resize", () => { if (S.proj) { const v = +$("#zoom").value; fitZoom(); setZoom(v); } });

@@ -138,6 +138,43 @@ def project(path, mode):
     return res
 
 
+def frame_at(video, t, width=None):
+    """Image du rec à l'instant t (pleine définition par défaut)."""
+    from io import BytesIO
+    from PIL import Image
+    vf = ["-vf", f"scale={width}:-2"] if width else []
+    raw = subprocess.run([need("ffmpeg"), "-hide_banner", "-loglevel", "error", "-ss", f"{max(0.0, float(t)):.2f}",
+                          "-i", str(video), "-frames:v", "1", *vf, "-f", "image2pipe", "-vcodec", "png", "-"],
+                         capture_output=True).stdout
+    return Image.open(BytesIO(raw)).convert("RGB") if raw else None
+
+
+def banners_info(path=None, mode=None):
+    import banners
+    saved = load_config().get("banner", {})
+    tl = plan = None
+    if path and mode:
+        try:
+            pr = project(path, mode)
+            tl, plan = pr.get("timeline"), pr.get("plan")
+        except Exception:
+            pass
+    for d_ in (banners.SKIN_DIR, banners.RANK_DIR, banners.CUP_DIR):
+        d_.mkdir(parents=True, exist_ok=True)
+    defaults = banners.project_defaults(tl, plan, saved)
+    return {"templates": banners.catalog(defaults), "themes": {k: v["label"] for k, v in banners.THEMES.items()},
+            "skins": [{"name": p.name, "path": str(p), "url": furl(p, f"&v={p.stat().st_mtime:.0f}")} for p in banners.skins_list()],
+            "skin_dir": str(banners.SKIN_DIR), "assets_dir": str(banners.USER_ASSETS)}
+
+
+def banner_image(d):
+    import banners
+    frame = None
+    if d.get("bg") == "frame" and d.get("path"):
+        frame = frame_at(find_video(d["path"]), d.get("t") or 0, 1920)
+    return banners.render(d["id"], d.get("values") or {}, d.get("skins") or [], frame)
+
+
 def furl(p, extra=""):
     return f"/file?path={quote(str(p))}{extra}"
 
@@ -158,7 +195,7 @@ def music_list():
 
 def settings_get():
     cfg = load_config()
-    return {"render": cfg["render"], "edit": cfg["edit"], "ui": cfg.get("ui", {}), "library_dirs": [str(d) for d in library_dirs(cfg)],
+    return {"render": cfg["render"], "edit": cfg["edit"], "ui": cfg.get("ui", {}), "banner": cfg.get("banner", {}), "library_dirs": [str(d) for d in library_dirs(cfg)],
             "encoder": detect_encoder(), "version": APP_VERSION,
             "music_dir": str(DATA_DIR / "musiques"), "data_dir": str(DATA_DIR),
             "modes": {k: v["label"] for k, v in MODES.items()}}
@@ -166,7 +203,7 @@ def settings_get():
 
 def settings_set(data):
     user = json.loads(CONFIG_PATH.read_text(encoding="utf-8")) if CONFIG_PATH.exists() else {}
-    for sec in ("render", "edit", "ui"):
+    for sec in ("render", "edit", "ui", "banner"):
         for k, v in (data.get(sec) or {}).items():
             if k in DEFAULT_CONFIG[sec]:
                 user.setdefault(sec, {})[k] = v
@@ -356,6 +393,8 @@ class H(BaseHTTPRequestHandler):
                 import updater
                 return self._json(dict(updater.STATE, version=APP_VERSION, base=updater.BASE_VERSION,
                                        configured=bool(updater.latest_url())))
+            if u.path == "/api/banners":
+                return self._json(banners_info(q.get("path"), q.get("mode")))
             if u.path == "/api/fonts":
                 return self._json(["LuckiestGuy-Regular.ttf", "Anton-Regular.ttf"])
             return self._json({"error": "route inconnue"}, 404)
@@ -405,6 +444,46 @@ class H(BaseHTTPRequestHandler):
                 info["files"] = [{"name": f.name, "url": furl(f, f"&v={time.time():.0f}")} for f in files]
                 info["dir"] = str(files[0].parent) if files else None
                 return self._json(info)
+            if u.path == "/api/banner/render":
+                import banners
+                img = banner_image(d)
+                png = banners.TEMPLATES[d["id"]].get("fn") is banners.t_bandeau_stream
+                out = banners.save(img, CACHE / f"banner_preview.{'png' if png else 'jpg'}")
+                return self._json({"url": furl(out, f"&v={time.time():.3f}"), "size": img.size})
+            if u.path == "/api/banner/export":
+                import banners
+                img = banner_image(d)
+                png = d["id"] == "bandeau_stream"
+                base = library_dirs()[0]
+                dst_dir = base / ("Miniatures" if banners.TEMPLATES[d["id"]]["format"] == "Miniature" else "Bannières")
+                dst_dir.mkdir(parents=True, exist_ok=True)
+                stem = Path(d["path"]).stem + " - " if d.get("path") else ""
+                dst = dst_dir / f"{stem}{banners.TEMPLATES[d['id']]['label'].replace('/', '-')} {time.strftime('%H%M%S')}.{'png' if png else 'jpg'}"
+                banners.save(img, dst)
+                keep = {k: v for k, v in (d.get("values") or {}).items()
+                        if k in DEFAULT_CONFIG["banner"] and v not in (None, "")}
+                if keep:
+                    settings_set({"banner": keep})
+                return self._json({"ok": True, "saved": str(dst)})
+            if u.path == "/api/banner/cutout":
+                import banners
+                if not d.get("path"):
+                    return self._json({"ok": False, "message": "Ouvre d'abord un rec et place le curseur sur ton skin."})
+                fr = frame_at(find_video(d["path"]), d.get("t") or 0)
+                if fr is None:
+                    return self._json({"ok": False, "message": "Impossible de lire l'image du rec à cet endroit."})
+                try:
+                    p = banners.cutout(fr)
+                except ImportError:
+                    return self._json({"ok": False, "message": "Détourage indisponible (module rembg absent). "
+                                       "Mets un PNG sans fond dans le dossier des skins."})
+                return self._json({"ok": True, "skin": {"name": p.name, "path": str(p), "url": furl(p, f"&v={time.time():.0f}")}})
+            if u.path == "/api/banner/skin_delete":
+                import banners
+                p = Path(d["path"])
+                if p.parent.resolve() == banners.SKIN_DIR.resolve() and p.exists():
+                    p.unlink()
+                return self._json({"ok": True})
             if u.path == "/api/update/check":
                 import updater
                 if not updater.STATE["checking"]:

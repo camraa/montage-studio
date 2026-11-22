@@ -71,6 +71,9 @@ DEFAULT_CONFIG = {
     "ui": {
         "mac_window": True,           # fenêtre façon macOS (boutons rouge/orange/vert) ; False = cadre Windows
     },
+    "banner": {                       # studio de bannières : valeurs retenues d'une fois sur l'autre
+        "pseudo": "", "mate": "", "reseau1": "", "reseau2": "", "slogan": "", "cup": "",
+    },
     "edit": {
         "bus_skip_s": 30,             # coupe le bus au début de chaque game (HUD visible dès le bus)
         "end_tail_s": 6,

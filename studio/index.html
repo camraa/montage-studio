@@ -58,6 +58,7 @@
           <a data-cmd="view-video">Aperçu vidéo<kbd>1</kbd></a>
           <a data-cmd="view-card">Carton<kbd>2</kbd></a>
           <a data-cmd="view-thumbs">Miniatures YouTube<kbd>3</kbd></a>
+          <a data-cmd="view-banners">Studio de bannières<kbd>4</kbd></a>
           <hr>
           <a data-cmd="zoom-fit">Timeline : tout afficher<kbd>0</kbd></a>
           <hr>
@@ -115,6 +116,7 @@
         <button data-view="video" class="active">Aperçu</button>
         <button data-view="card">Carton</button>
         <button data-view="thumbs">Miniatures</button>
+        <button data-view="banners">Bannières</button>
       </div>
       <span class="viewer-spacer"></span>
     </div>
@@ -162,6 +164,36 @@
               Teste 2 ou 3 variantes avec « Tester et comparer » dans YouTube Studio.</p>
           </div>
           <div id="th-grid" class="th-grid"></div>
+        </div>
+      </div>
+      <div class="view" id="view-banners">
+        <div class="bn-wrap">
+          <aside class="bn-side scroll">
+            <div class="group bn-group">
+              <div class="bn-row"><label>Modèle</label><select id="bn-template"></select></div>
+              <div id="bn-fields"></div>
+            </div>
+            <div class="group bn-group">
+              <div class="bn-head"><b>Skins</b><span class="muted" id="bn-skin-hint"></span></div>
+              <div id="bn-skins" class="bn-skins"></div>
+              <div class="bn-btns">
+                <button class="btn" data-cmd="bn-cutout" title="Détoure ton skin à l'endroit du curseur de la vidéo">Détourer l'image du curseur</button>
+                <button class="btn" data-cmd="bn-skin-folder">Dossier des skins</button>
+              </div>
+              <p class="tip">Mets le curseur de la vidéo sur un moment où ton skin est bien visible (vestiaire, salon, emote), puis « Détourer ». Tu peux aussi déposer des PNG sans fond dans le dossier des skins.</p>
+            </div>
+            <div class="group bn-group">
+              <div class="bn-row"><label>Fond</label>
+                <div class="segmented" id="bn-bg"><button data-bg="theme" class="active">Couleurs</button><button data-bg="frame">Image du rec</button></div></div>
+              <p class="tip">« Image du rec » utilise l'image sous le curseur de la vidéo, floutée.</p>
+              <div class="bn-btns"><button class="btn" data-cmd="bn-assets">Mes icônes (rangs, cups)</button></div>
+            </div>
+          </aside>
+          <section class="bn-main">
+            <div class="bn-preview"><img id="bn-img" alt=""><div id="bn-msg" class="stage-msg">Choisis un modèle</div></div>
+            <div class="bn-bar"><span class="muted" id="bn-info"></span>
+              <button class="btn primary" data-cmd="bn-export">Exporter</button></div>
+          </section>
         </div>
       </div>
     </div>
