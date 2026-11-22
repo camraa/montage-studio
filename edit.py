@@ -86,7 +86,11 @@ def build(cfg):
         if cup:
             plan["final"] = {"type": "cup", "points": tl.get("final_points"), "parties": len(plan["games"]),
                              "cup_games": cup_games,
-                             "last": {"partie": last["game"], "gained": last["gained"], "kills": last["kills"]}}
+                             "last": {"partie": last["game"], "gained": last["gained"], "kills": last["kills"]},
+                             "history": [{"partie": g["game"], "gained": g.get("points_gained"),
+                                          "total": (g["points_before"] or 0) + (g.get("points_gained") or 0)
+                                          if g.get("points_before") is not None else None,
+                                          "kills": len(g["kills"])} for g in games]}
         elif box:
             sc_ = [g["score"] for g in games if g.get("score")]
             last_rank = next((g["rank_after"] for g in reversed(games) if g.get("rank_after")), None)

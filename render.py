@@ -166,6 +166,10 @@ def _card_cup(rc, card, final, d, u, W, H):
             y = _center(d, f"{card['points']} PTS", mid, y + int(50 * u), W, ACCENT)
         done, current = card["partie"] - 1, card["partie"]
         line = _prev_line(card.get("prev"))
+    hist = [h for h in (card.get("history") or []) if h.get("gained") is not None or h.get("total") is not None]
+    if final and len(hist) >= 2:
+        _cup_chart(rc, d, hist, y + int(60 * u), u, W)
+        return
     gap, bw = int(12 * u), int(1100 * u)
     cw = (bw - gap * (n - 1)) / n
     x0, yb, hb = (W - bw) / 2, y + int(70 * u), int(22 * u)
@@ -176,6 +180,39 @@ def _card_cup(rc, card, final, d, u, W, H):
         d.rounded_rectangle([x, yb, x + cw, yb + hb], 5, fill=col)
     if line:
         _center(d, line, label, yb + hb + int(55 * u), W, GREY, stroke=2)
+
+
+def _cup_chart(rc, d, hist, top, u, W):
+    """Carton de fin de Cup : points gagnés par partie (barres) + total cumulé (courbe)."""
+    small = _font(rc, int(30 * u), "label")
+    tiny = _font(rc, int(26 * u), "label")
+    bw, bh = int(1200 * u), int(300 * u)
+    x0, y0 = (W - bw) / 2, top + int(30 * u)
+    n = len(hist)
+    gained = [max(0, h.get("gained") or 0) for h in hist]
+    totals, acc = [], 0
+    for h, g in zip(hist, gained):
+        acc = h["total"] if h.get("total") is not None else acc + g
+        totals.append(acc)
+    gmax, tmax = max(gained) or 1, max(totals) or 1
+    d.rounded_rectangle([x0 - 30 * u, y0 - 40 * u, x0 + bw + 30 * u, y0 + bh + 60 * u], int(24 * u), fill=(8, 14, 44, 200))
+    slot = bw / n
+    bar_w = slot * 0.5
+    pts = []
+    for i, (h, g, t) in enumerate(zip(hist, gained, totals)):
+        cx = x0 + slot * (i + 0.5)
+        hgt = bh * 0.40 * g / gmax
+        d.rounded_rectangle([cx - bar_w / 2, y0 + bh - hgt, cx + bar_w / 2, y0 + bh], int(8 * u), fill=ACCENT)
+        if g:
+            d.text((cx, y0 + bh - hgt - 8 * u), f"+{g}", font=tiny, fill=ACCENT, anchor="md")
+        d.text((cx, y0 + bh + 28 * u), f"P{h['partie']}", font=tiny, fill=WHITE, anchor="mm")
+        pts.append((cx, y0 + bh * 0.46 - bh * 0.42 * t / tmax))
+    d.line(pts, fill=WHITE, width=max(3, int(6 * u)), joint="curve")
+    for i, (px, py) in enumerate(pts):
+        r = int(9 * u)
+        d.ellipse([px - r, py - r, px + r, py + r], fill=WHITE, outline=(8, 14, 44), width=max(2, int(3 * u)))
+    lx, ly = pts[-1]
+    d.text((lx, ly - 22 * u), f"{totals[-1]} PTS", font=small, fill=WHITE, anchor="md", stroke_width=3, stroke_fill=(8, 14, 44))
 
 
 def _rank_txt(r):
