@@ -27,6 +27,17 @@ Après des modifs : **Commit** → **Push**, puis **Pull** sur l'autre PC.
   le rec d'origine est rangé dans `Vidéos\Vidéos brutes`. Un `.txt` avec titre + chapitres YouTube est créé à côté.
 - Miniatures : onglet Miniatures → 4 variantes → Exporter vers `Vidéos\Miniatures`.
 
+## Pour les réseaux
+- **Shorts TikTok** (Rendu → Créer les Shorts) : les meilleurs enchaînements de kills en vidéos verticales
+  1080x1920 avec gros titre auto et **sous-titres de ta voix** mot par mot → `Vidéos\Shorts`.
+- **Sous-titres YouTube** : option « Fichier .srt » dans l'onglet Rendu (à envoyer avec la vidéo).
+- **Compteur en direct** pendant les games : partie, kills (s'allume à chaque kill), points ou rang.
+- **Carton de fin de Cup** avec le graphique des points partie par partie.
+- **Studio de bannières** (onglet Bannières) : miniatures Cup (classement, mystère #?, duo, gros titre),
+  Ranked (grind, avant/après), bannière de chaîne, écran de fin, bandeau de stream, bannière X.
+  Ton skin est détouré depuis le rec (curseur sur ton skin → « Détourer »). Tes vraies icônes de rangs / cups :
+  dépose-les en PNG dans le dossier « Mes icônes » (elles remplacent les badges dessinés).
+
 ## Dans l'app
 - Raccourcis : Espace lecture, S couper, Suppr supprimer, A ajouter, Ctrl+S, Ctrl+Z, Ctrl+R.
 - Fenêtre façon Mac : boutons rouge / orange / vert, double-clic sur la barre du haut pour agrandir.

@@ -33,6 +33,16 @@ if not exist "build_assets\ocr_models" mkdir "build_assets\ocr_models"
 "%VPY%" -c "import easyocr;easyocr.Reader(['en','fr'],gpu=False,verbose=False,model_storage_directory=r'build_assets\ocr_models',user_network_directory=r'build_assets\ocr_models')"
 if errorlevel 1 ( echo [ERREUR] modeles OCR & pause & exit /b )
 
+echo      Modeles de transcription ^(voix^) et de detourage ^(skins^)...
+if not exist "build_assets\whisper_models\small\model.bin" (
+  "%VPY%" -c "from faster_whisper import download_model;download_model('small',output_dir=r'build_assets\whisper_models\small')"
+  if errorlevel 1 ( echo [ATTENTION] modele de transcription non telecharge : il le sera au 1er Short )
+)
+if not exist "build_assets\rembg_models\isnet-general-use.onnx" (
+  "%VPY%" -c "import os,urllib.request as u;p=r'build_assets\rembg_models\isnet-general-use.onnx';os.makedirs(os.path.dirname(p),exist_ok=True);u.urlretrieve('https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx',p)"
+  if errorlevel 1 ( echo [ATTENTION] modele de detourage non telecharge : il le sera au 1er detourage )
+)
+
 echo [5/7] FFmpeg...
 if not exist "build_assets\ffmpeg" mkdir "build_assets\ffmpeg"
 set "FF="

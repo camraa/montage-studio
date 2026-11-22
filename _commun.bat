@@ -81,8 +81,12 @@ if not exist ".venv\installed.ok" (
   if errorlevel 1 ( echo [ERREUR] verification & pause & exit /b )
   echo ok> ".venv\installed.ok"
 )
-
-rem ---------------------------------------------------------------- musiques
+if not exist ".venv\installed2.ok" (
+  echo [INSTALL] Sous-titres de la voix ^(faster-whisper^) et detourage des skins ^(onnxruntime^)...
+  "%VPY%" -m pip install faster-whisper onnxruntime
+  if errorlevel 1 ( echo [ERREUR] faster-whisper & pause & exit /b )
+  echo ok> ".venv\installed2.ok"
+)
 
 rem ---------------------------------------------------------------- installation seule
 if /i "%~1"=="setup" exit /b 0

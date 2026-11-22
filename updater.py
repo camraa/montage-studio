@@ -22,7 +22,7 @@ import zipimport
 from pathlib import Path
 
 BASE_VERSION = "1.0.0"          # version du lanceur (l'exe installé)
-APP_MODULES = {"common", "scan", "edit", "render", "run", "job", "thumbs", "studio", "banners"}
+APP_MODULES = {"common", "scan", "edit", "render", "run", "job", "thumbs", "studio", "banners", "shorts", "transcribe"}
 PREFIX = "MSTUDIO-UPDATE"
 
 
