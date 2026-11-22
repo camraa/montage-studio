@@ -28,3 +28,9 @@ _update_pkg/
 3_edit.py
 4_render.py
 LANCER_MONTAGE.bat
+
+# --- modèles et fichiers perso créés en lançant depuis le code ---
+build_assets/
+whisper_models/
+rembg_models/
+assets/

@@ -18,12 +18,12 @@ datas = [
     (os.path.join(ROOT, "icone.png"), "."),
     (os.path.join(ROOT, "THIRD_PARTY_LICENSES.txt"), "."),
 ]
-for sub in ("ocr_models", "ffmpeg"):
+for sub in ("ocr_models", "ffmpeg", "whisper_models", "rembg_models"):
     if os.path.isdir(os.path.join(B, sub)):
         datas.append((os.path.join(B, sub), sub))
 
 binaries, hidden = [], []
-for pkg in ("easyocr", "webview", "pythonnet", "clr_loader"):
+for pkg in ("easyocr", "webview", "pythonnet", "clr_loader", "faster_whisper", "ctranslate2", "onnxruntime", "av"):
     try:
         d, b, h = collect_all(pkg)
     except Exception:
@@ -31,7 +31,7 @@ for pkg in ("easyocr", "webview", "pythonnet", "clr_loader"):
     datas += d
     binaries += b
     hidden += h
-hidden += ["scan", "edit", "render", "thumbs", "job", "run", "banners", "studio", "common",
+hidden += ["scan", "edit", "render", "thumbs", "job", "run", "banners", "shorts", "transcribe", "studio", "common",
            "updater", "update_cfg", "zipimport", "py_compile", "urllib.request", "ssl",
            "clr_loader", "pythonnet"]
 hidden += collect_submodules("webview.platforms")
