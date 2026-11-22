@@ -1,0 +1,21 @@
+﻿MONTAGE STUDIO - CONDITIONS D'UTILISATION
+
+1. Utilisation. Le logiciel est fourni complet, sans clé d'activation. Il ne peut pas être revendu
+   ou redistribué sans l'accord de son éditeur.
+
+2. Contenus. Tu restes propriétaire de tes vidéos. Le logiciel les traite uniquement sur ton PC :
+   rien n'est envoyé sur Internet.
+
+3. Marques. Montage Studio n'est ni affilié, ni approuvé, ni sponsorisé par Epic Games.
+   Fortnite est une marque d'Epic Games, Inc. Respecte les règles d'Epic sur les contenus de fans
+   quand tu publies tes vidéos.
+
+4. Musiques et polices. Les musiques intégrées sont des compositions originales générées par le
+   logiciel et peuvent être utilisées dans tes vidéos. Si tu ajoutes tes propres musiques, tu dois
+   avoir le droit de les utiliser.
+
+5. Garantie. Le logiciel est fourni "tel quel", sans garantie. L'éditeur ne peut être tenu
+   responsable d'une perte de fichiers ou de données. Garde des sauvegardes de tes recs importants.
+
+6. Composants tiers. Le logiciel inclut des composants open source listés dans
+   THIRD_PARTY_LICENSES.txt, chacun sous sa propre licence.

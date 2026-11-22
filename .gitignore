@@ -1,0 +1,29 @@
+# --- secrets : ne JAMAIS publier ---
+licence_privee/
+
+# --- fichiers générés / perso ---
+.venv/
+build/
+dist/
+__pycache__/
+*.pyc
+work/
+out/
+out2/
+config.json
+encoder.json
+update_cfg.py
+ocr_models/
+bin/
+ffmpeg*.exe
+ffprobe*.exe
+apercu_bannieres/
+*.log
+_update_pkg/
+
+# --- anciens scripts de la 1re version ---
+1_calibrate.py
+2_scan.py
+3_edit.py
+4_render.py
+LANCER_MONTAGE.bat
