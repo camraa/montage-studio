@@ -37,7 +37,7 @@ echo [5/7] FFmpeg...
 if not exist "build_assets\ffmpeg" mkdir "build_assets\ffmpeg"
 set "FF="
 for /f "delims=" %%F in ('where ffmpeg 2^>nul') do if not defined FF set "FF=%%F"
-if not defined FF ( echo [ERREUR] ffmpeg introuvable : lance d'abord un des MONTAGE_*.bat & pause & exit /b )
+if not defined FF ( echo [ERREUR] ffmpeg introuvable : ferme cette fenetre et relance BUILD_EXE.bat & pause & exit /b )
 for %%D in ("!FF!") do set "FFDIR=%%~dpD"
 copy /y "!FFDIR!ffmpeg.exe" "build_assets\ffmpeg\" >nul
 copy /y "!FFDIR!ffprobe.exe" "build_assets\ffmpeg\" >nul
