@@ -3,26 +3,27 @@ MONTAGE STUDIO
 
 >>> BUILD_EXE.bat : fabrique la VRAIE application (MontageStudio.exe + installateur)
     Résultat dans dist\ :
-      - dist\MontageStudio\MontageStudio.exe          (l'app, à lancer directement)
-      - dist\MontageStudio_Setup_1.0.x.exe (+ .bin)    (l'installateur à donner à tes clients,
-                                                       TOUJOURS avec les fichiers .bin à côté)
-    L'installateur contient tout : app, FFmpeg, modèles OCR, moteur CUDA, polices, musiques.
-    Aucune clé de licence : l'app est complète dès l'installation.
+      - dist\MontageStudio\MontageStudio.exe   (l'app, à lancer directement)
+      - dist\MontageStudio_Setup.exe + .bin     (l'installateur complet : app, FFmpeg, modèles OCR,
+                                               moteur CUDA, polices, musiques)
+    Aucune licence, aucune clé : l'app est complète dès l'installation.
     1er build : 15-30 min.
 
->>> PUBLIER_MAJ.bat : envoie une MISE À JOUR (quelques Mo) sur GitHub.
+>>> PUBLIER_INSTALLATEUR.bat : met l'installateur en ligne et copie le LIEN à donner à tes clients.
+    Le lien ne change jamais : https://github.com/camraa/montage-studio-maj/releases/tag/installateur
+    À relancer après chaque BUILD_EXE.bat.
+
+>>> PUBLIER_MAJ.bat : envoie une MISE À JOUR (quelques Mo).
     Toutes les apps installées la téléchargent toutes seules au lancement suivant,
-    puis bouton vert "Mise à jour prête — Redémarrer". Paquet signé : impossible à falsifier.
+    puis bouton vert "Mise à jour prête — Redémarrer". L'app n'accepte que les paquets venant
+    de ton dépôt GitHub, avec une empreinte vérifiée.
     Si une version plante au démarrage, l'app revient automatiquement à la précédente.
-    Les paquets vont dans un dépôt PUBLIC séparé (update_repo.txt), jamais dans le dépôt du code.
 
->>> licence_privee\ : ta clé de SIGNATURE des mises à jour (créée au 1er build).
-    Elle n'est PAS sur GitHub. Sauvegarde-la (clé USB, cloud perso). Sur un autre PC, le build
-    marche sans elle ; pour publier des mises à jour depuis ce PC, copie-y ce dossier.
-
->>> GitHub : le code est dans ton dépôt privé. Sur un nouveau PC :
-      git clone https://github.com/camraa/montage-studio   puis BUILD_EXE.bat
-    Après des modifs : GitHub Desktop (ou git) -> Commit -> Push.
+>>> GitHub : le code est dans ton dépôt privé camraa/montage-studio. Sur un nouveau PC :
+    GitHub Desktop -> Clone -> montage-studio, puis BUILD_EXE.bat. Rien d'autre à copier.
+    Après des modifs : Commit -> Push (et Pull sur l'autre PC).
+    Le téléchargement et les mises à jour vont dans un 2e dépôt PUBLIC : camraa/montage-studio-maj
+    (créé tout seul la 1re fois).
 
 Modes : Cup, Ranked Reload, Ranked Battle Royale, Arène Box Fight (rang + manches),
         Créatif 1v1 (score des matchs lu en haut de l'écran).

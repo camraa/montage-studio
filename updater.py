@@ -22,7 +22,7 @@ import zipimport
 from pathlib import Path
 
 BASE_VERSION = "1.0.0"          # version du lanceur (l'exe installé)
-APP_MODULES = {"common", "scan", "edit", "render", "run", "job", "thumbs", "studio", "license"}
+APP_MODULES = {"common", "scan", "edit", "render", "run", "job", "thumbs", "studio", "banners"}
 PREFIX = "MSTUDIO-UPDATE"
 
 
@@ -143,22 +143,13 @@ def mark_ok():
 
 
 # ------------------------------------------------------------------ vérification / téléchargement
-def _public_key():
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-    import base64
-    from license_pub import PUBLIC_KEY
-    return Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(PUBLIC_KEY + "=" * (-len(PUBLIC_KEY) % 4)))
-
-
 def verify_manifest(m, blob):
-    """Le paquet doit avoir la bonne empreinte ET une signature faite avec ta clé privée."""
-    import base64
-    sha = hashlib.sha256(blob).hexdigest()
-    if sha != m.get("sha256"):
+    """Le paquet doit venir de ton dépôt GitHub et avoir exactement l'empreinte annoncée."""
+    url = m.get("url", "")
+    if not url.startswith(f"https://github.com/{_repo()}/releases/download/"):
+        raise ValueError("mise à jour refusée : elle ne vient pas du dépôt officiel")
+    if hashlib.sha256(blob).hexdigest() != m.get("sha256"):
         raise ValueError("fichier corrompu (empreinte différente)")
-    msg = f"{PREFIX}|{m['version']}|{m['sha256']}|{m.get('min_base', '0')}".encode()
-    sig = m.get("sig", "")
-    _public_key().verify(base64.urlsafe_b64decode(sig + "=" * (-len(sig) % 4)), msg)
 
 
 def _get(url, timeout=15):

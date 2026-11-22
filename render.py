@@ -286,8 +286,7 @@ def make_card(rc, card, path, final=False):
     if bbox:   # centrage vertical du bloc de texte
         block = layer.crop((0, bbox[1], W, bbox[3]))
         img.alpha_composite(block, (0, (H - block.height) // 2))
-    from license import watermark
-    watermark(img.convert("RGB")).save(path)
+    img.convert("RGB").save(path)
 
 
 def render_card(rc, card, out, kind, final=False):

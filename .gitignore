@@ -1,5 +1,6 @@
-# --- secrets : ne JAMAIS publier ---
+# --- anciennes clés (plus utilisées) ---
 licence_privee/
+license_pub.py
 
 # --- fichiers générés / perso ---
 .venv/

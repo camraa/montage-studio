@@ -20,7 +20,6 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from common import (APP_VERSION, ASSET_DIR, CONFIG_PATH, DATA_DIR, DEFAULT_CONFIG, FROZEN, MODES, RAW_DIR_NAME,
                     VIDEO_EXT, WORK_ROOT, detect_encoder, ffprobe_info, library_dirs, load_config, make_cfg,
                     need, work_dir)
-import license
 
 PORT = 8765
 UI = ASSET_DIR / "studio"
@@ -160,7 +159,7 @@ def music_list():
 def settings_get():
     cfg = load_config()
     return {"render": cfg["render"], "edit": cfg["edit"], "ui": cfg.get("ui", {}), "library_dirs": [str(d) for d in library_dirs(cfg)],
-            "encoder": detect_encoder(), "version": APP_VERSION, "license": license.status(),
+            "encoder": detect_encoder(), "version": APP_VERSION,
             "music_dir": str(DATA_DIR / "musiques"), "data_dir": str(DATA_DIR),
             "modes": {k: v["label"] for k, v in MODES.items()}}
 
@@ -357,8 +356,6 @@ class H(BaseHTTPRequestHandler):
                 import updater
                 return self._json(dict(updater.STATE, version=APP_VERSION, base=updater.BASE_VERSION,
                                        configured=bool(updater.latest_url())))
-            if u.path == "/api/license":
-                return self._json(license.status())
             if u.path == "/api/fonts":
                 return self._json(["LuckiestGuy-Regular.ttf", "Anton-Regular.ttf"])
             return self._json({"error": "route inconnue"}, 404)
@@ -408,9 +405,6 @@ class H(BaseHTTPRequestHandler):
                 info["files"] = [{"name": f.name, "url": furl(f, f"&v={time.time():.0f}")} for f in files]
                 info["dir"] = str(files[0].parent) if files else None
                 return self._json(info)
-            if u.path == "/api/license":
-                ok, info = license.activate(d.get("key", ""))
-                return self._json({"ok": ok, "message": "" if ok else info, "status": license.status()})
             if u.path == "/api/update/check":
                 import updater
                 if not updater.STATE["checking"]:
@@ -423,9 +417,6 @@ class H(BaseHTTPRequestHandler):
                 kill_jobs()
                 threading.Timer(0.5, updater.restart).start()
                 return self._json({"ok": True})
-            if u.path == "/api/license/remove":
-                license.deactivate()
-                return self._json(license.status())
             if u.path == "/api/thumbnails/export":
                 src = Path(d["file"])
                 vp = find_video(d["path"])

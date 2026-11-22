@@ -5,10 +5,12 @@ analyse OCR du HUD, découpe des temps morts, cartons récap entre les games, mu
 sous la voix, rendu 4K NVENC, miniatures YouTube et studio de bannières.
 
 ## Sur un nouveau PC
-1. `git clone https://github.com/camraa/montage-studio` (ou GitHub Desktop → Clone)
-2. Double-clic sur **BUILD_EXE.bat** → `dist\MontageStudio_Setup_x.exe` (+ fichiers `.bin`)
+1. GitHub Desktop → Clone → `camraa/montage-studio`
+2. Double-clic sur **BUILD_EXE.bat** → `dist\MontageStudio_Setup.exe` (+ fichiers `.bin`)
 
-## Publier une mise à jour pour les clients
-Modifie le code, puis **PUBLIER_MAJ.bat** (nécessite le dossier `licence_privee\`, qui n'est jamais sur GitHub).
+## Distribuer
+- **PUBLIER_INSTALLATEUR.bat** : met l'installateur en ligne, lien fixe pour les clients :
+  https://github.com/camraa/montage-studio-maj/releases/tag/installateur
+- **PUBLIER_MAJ.bat** : envoie une mise à jour, reçue automatiquement par toutes les apps installées.
 
 Voir `README.txt` pour le détail.
