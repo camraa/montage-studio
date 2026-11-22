@@ -107,6 +107,7 @@ DEFAULT_CONFIG = {
         "endgame_music_s": 120,       # durée de cette musique avant la fin de la partie
         "endgame_volume": 0.35,       # son volume (plus bas que les cartons)
         "endgame_duck_db": 9,         # baisse max sous ta voix / les tirs (plus doux : le combat est permanent)
+        "live_counter": True,         # compteur en haut de l'écran pendant les games (partie, kills, points)
         "shorts_count": 3,            # nombre de Shorts TikTok créés par rec
         "shorts_layout": "cadre",     # "cadre" (gameplay agrandi + fond flouté) ou "plein" (plein écran, bords coupés)
         "shorts_captions": True,      # sous-titres animés de ta voix sur les Shorts
