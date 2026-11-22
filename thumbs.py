@@ -274,8 +274,7 @@ def accent_for(main):
 
 
 def save_jpg(img, path):
-    from license import watermark
-    img = watermark(img.convert("RGB"))
+    img = img.convert("RGB")
     q = 92
     while True:
         img.save(path, "JPEG", quality=q, optimize=True, progressive=True)

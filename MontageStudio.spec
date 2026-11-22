@@ -31,9 +31,9 @@ for pkg in ("easyocr", "webview", "pythonnet", "clr_loader"):
     datas += d
     binaries += b
     hidden += h
-hidden += ["scan", "edit", "render", "thumbs", "job", "run", "license", "license_pub", "studio", "common",
+hidden += ["scan", "edit", "render", "thumbs", "job", "run", "banners", "studio", "common",
            "updater", "update_cfg", "zipimport", "py_compile", "urllib.request", "ssl",
-           "cryptography.hazmat.primitives.asymmetric.ed25519", "clr_loader", "pythonnet"]
+           "clr_loader", "pythonnet"]
 hidden += collect_submodules("webview.platforms")
 
 a = Analysis(

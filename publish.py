@@ -5,11 +5,13 @@
 
 1. met la version dans common.py
 2. compile le code (.pyc) + interface/polices/musiques -> update-<version>.zip (quelques Mo)
-3. signe le paquet avec licence_privee/cle_privee.pem (les apps refusent tout paquet non signé)
-4. crée latest.json et envoie les deux fichiers dans une release GitHub (outil gh)
+3. crée latest.json (empreinte SHA-256) et envoie les deux fichiers dans une release GitHub (outil gh)
+
+  python publish.py --installateur
+     met dist/MontageStudio_Setup.exe (+ .bin) en ligne dans la release fixe "installateur"
+     -> lien à donner aux clients : https://github.com/<dépôt>/releases/tag/installateur
 """
 import argparse
-import base64
 import hashlib
 import json
 import py_compile
@@ -23,7 +25,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from updater import APP_MODULES, BASE_VERSION, PREFIX, normalize_repo  # noqa: E402
+from updater import APP_MODULES, BASE_VERSION, normalize_repo  # noqa: E402
 
 ASSETS = ["studio", "polices", "musiques", "intro.mp3", "outro.mp3", "icone.ico", "icone.png"]
 
@@ -69,15 +71,6 @@ def build_package(version, out_dir):
     return pkg
 
 
-def sign(msg):
-    from cryptography.hazmat.primitives import serialization
-    key_p = HERE / "licence_privee" / "cle_privee.pem"
-    if not key_p.exists():
-        sys.exit("[ERREUR] licence_privee/cle_privee.pem introuvable : c'est elle qui signe les mises à jour")
-    key = serialization.load_pem_private_key(key_p.read_bytes(), None)
-    return base64.urlsafe_b64encode(key.sign(msg)).decode().rstrip("=")
-
-
 def gh(*args, check=True):
     exe = shutil.which("gh")
     if not exe:
@@ -85,7 +78,48 @@ def gh(*args, check=True):
     return subprocess.run([exe, *args], check=check)
 
 
+INSTALL_TAG = "installateur"
+INSTALL_NOTES = """## Installer Montage Studio
+
+1. Télécharge **tous** les fichiers ci-dessous (`MontageStudio_Setup.exe` et les `.bin`) dans le **même dossier**.
+2. Lance `MontageStudio_Setup.exe`.
+
+Windows 10/11 64 bits. Carte NVIDIA conseillée (l'analyse marche sans, mais plus lentement).
+Les mises à jour arrivent ensuite toutes seules dans l'app.
+"""
+
+
+def ensure_repo(repo):
+    if gh("repo", "view", repo, check=False).returncode != 0:
+        print(f"[GITHUB] création du dépôt public {repo} (il ne contiendra que l'installateur et les mises à jour)")
+        gh("repo", "create", repo, "--public", "--add-readme", "--description", "Téléchargement et mises à jour de Montage Studio")
+
+
+def publish_installer():
+    repo = repo_name()
+    files = sorted((HERE / "dist").glob("MontageStudio_Setup*.exe")) + sorted((HERE / "dist").glob("MontageStudio_Setup*.bin"))
+    if not any(f.suffix == ".exe" for f in files):
+        sys.exit("[ERREUR] dist/MontageStudio_Setup.exe introuvable : lance d'abord BUILD_EXE.bat")
+    total = sum(f.stat().st_size for f in files)
+    print(f"[INFO] {len(files)} fichier(s), {total / 1e9:.2f} Go à envoyer : ça peut prendre un moment")
+    if not shutil.which("gh"):
+        sys.exit(f"[ERREUR] outil GitHub (gh) absent. Envoi manuel : https://github.com/{repo}/releases/new?tag={INSTALL_TAG}")
+    ensure_repo(repo)
+    gh("release", "delete", INSTALL_TAG, "--repo", repo, "--yes", "--cleanup-tag", check=False)
+    gh("release", "create", INSTALL_TAG, *map(str, files), "--repo", repo, "--latest=false",
+       "--title", "Télécharger Montage Studio", "--notes", INSTALL_NOTES)
+    link = f"https://github.com/{repo}/releases/tag/{INSTALL_TAG}"
+    print(f"[OK] installateur en ligne. Lien à donner à tes clients :\n     {link}")
+    try:
+        subprocess.run(["clip"], input=link.encode(), check=False)
+        print("     (lien copié dans le presse-papiers)")
+    except OSError:
+        pass
+
+
 def main():
+    if "--installateur" in sys.argv:
+        return publish_installer()
     ap = argparse.ArgumentParser()
     ap.add_argument("version")
     ap.add_argument("notes", nargs="?", default="")
@@ -108,9 +142,8 @@ def main():
     sha = hashlib.sha256(blob).hexdigest()
     manifest = {"version": v, "url": f"https://github.com/{repo}/releases/download/v{v}/{pkg.name}",
                 "sha256": sha, "min_base": a.min_base, "notes": notes, "size": len(blob)}
-    manifest["sig"] = sign(f"{PREFIX}|{v}|{sha}|{a.min_base}".encode())
     (out / "latest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"[OK] paquet {pkg.name} ({len(blob) / 1e6:.1f} Mo) + latest.json signés -> {out}")
+    print(f"[OK] paquet {pkg.name} ({len(blob) / 1e6:.1f} Mo) + latest.json -> {out}")
 
     if a.no_upload:
         return
@@ -119,9 +152,7 @@ def main():
               f"  1. Ouvre https://github.com/{repo}/releases/new?tag=v{v}\n"
               f"  2. Glisse les 2 fichiers de {out}\n  3. Clique 'Publish release'")
         return
-    if gh("repo", "view", repo, check=False).returncode != 0:
-        print(f"[GITHUB] création du dépôt public {repo} (il ne contiendra que les mises à jour)")
-        gh("repo", "create", repo, "--public", "--add-readme", "--description", "Mises à jour de Montage Studio")
+    ensure_repo(repo)
     gh("release", "create", f"v{v}", str(pkg), str(out / "latest.json"), "--repo", repo,
        "--title", f"Montage Studio {v}", "--notes", notes or f"Montage Studio {v}")
     print(f"[OK] mise à jour {v} publiée : toutes les apps la recevront à leur prochain lancement")

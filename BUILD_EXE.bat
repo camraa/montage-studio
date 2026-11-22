@@ -1,6 +1,6 @@
 @echo off
 rem ============================================================
-rem  Fabrique MontageStudio.exe + l'installateur a donner a tes potes
+rem  Fabrique MontageStudio.exe + l'installateur a donner a tes clients
 rem ============================================================
 chcp 65001 >nul
 setlocal EnableDelayedExpansion
@@ -13,15 +13,11 @@ if errorlevel 1 ( echo [ERREUR] installation & pause & exit /b )
 set "VPY=.venv\Scripts\python.exe"
 set PYTHONUTF8=1
 
-echo [2/7] Outils de build (PyInstaller, pywebview, cryptography)...
-"%VPY%" -m pip install --upgrade pyinstaller pywebview cryptography >nul
+echo [2/7] Outils de build (PyInstaller, pywebview)...
+"%VPY%" -m pip install --upgrade pyinstaller pywebview >nul
 if errorlevel 1 ( echo [ERREUR] pip & pause & exit /b )
 
-echo [3/7] Cle de signature des mises a jour (creee une seule fois, gardee dans licence_privee\)...
-"%VPY%" keygen.py --init
-if not exist "license_pub.py" ( echo [ERREUR] cle publique & pause & exit /b )
-
-echo      Depot GitHub des mises a jour automatiques...
+echo [3/7] Depot GitHub des mises a jour automatiques...
 if not exist "update_repo.txt" (
   echo.
   echo  Les mises a jour passent par un depot GitHub PUBLIC qui ne contient que les paquets de mise a jour.
@@ -72,8 +68,8 @@ echo.
 echo ============================================================
 echo   TERMINE !
 echo   Application : dist\MontageStudio\MontageStudio.exe
-echo   Installateur : dist\MontageStudio_Setup_1.0.0.exe ^(+ fichiers .bin si gros^)
-echo   Donne le Setup ^(+ .bin^) a tes clients. NE DONNE JAMAIS licence_privee\
+echo   Installateur : dist\MontageStudio_Setup.exe ^(+ fichiers .bin^)
+echo   Pour le mettre en ligne ^(lien a donner a tes clients^) : PUBLIER_INSTALLATEUR.bat
 echo ============================================================
 start "" explorer "%~dp0dist"
 pause

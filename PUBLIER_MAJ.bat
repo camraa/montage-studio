@@ -1,7 +1,7 @@
 @echo off
 rem ============================================================
 rem  Publie une MISE A JOUR de Montage Studio (quelques Mo) sur GitHub.
-rem  Toutes les apps installees (toi + tes potes) la recoivent a leur prochain lancement.
+rem  Toutes les apps installees (toi + tes clients) la recoivent a leur prochain lancement.
 rem ============================================================
 chcp 65001 >nul
 setlocal EnableDelayedExpansion
@@ -10,7 +10,6 @@ set PYTHONUTF8=1
 set "VPY=.venv\Scripts\python.exe"
 if not exist "%VPY%" ( echo Lance d'abord BUILD_EXE.bat & pause & exit /b )
 if not exist "update_repo.txt" ( echo Lance d'abord BUILD_EXE.bat ^(il configure le depot GitHub^) & pause & exit /b )
-if not exist "licence_privee\cle_privee.pem" ( echo Cle privee introuvable dans licence_privee\ & pause & exit /b )
 
 rem ---- outil GitHub (gh)
 set "PATH=%ProgramFiles%\GitHub CLI;%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
