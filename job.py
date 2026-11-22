@@ -4,6 +4,7 @@
   python job.py render <mode> <vidéo>   rendu du plan (modifié ou non dans le studio)
   python job.py all    <mode> <vidéo>   scan + rendu
   python job.py proxy  <mode> <vidéo>   copie légère 720p pour l'aperçu dans le studio
+  python job.py shorts <mode> <vidéo>   Shorts TikTok verticaux (meilleurs fights + sous-titres)
 """
 import json
 import subprocess
@@ -48,6 +49,12 @@ def do_render(cfg):
         ensure_plan(cfg)
     out = render.render(cfg)
     if out and Path(out).exists():
+        if cfg["render"].get("subtitles_srt"):
+            try:
+                import transcribe
+                transcribe.srt_for_video(out, Path(out).with_suffix(".srt"))
+            except Exception as e:
+                print(f"[VOIX] sous-titres .srt impossibles : {type(e).__name__}: {e}")
         archive_raw(cfg["video"])
 
 
@@ -91,6 +98,9 @@ def main():
         do_render(cfg)
     if action == "proxy":
         do_proxy(cfg)
+    if action == "shorts":
+        import shorts
+        shorts.run(cfg)
     print("[FIN]")
 
 

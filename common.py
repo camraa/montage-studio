@@ -107,6 +107,11 @@ DEFAULT_CONFIG = {
         "endgame_music_s": 120,       # durée de cette musique avant la fin de la partie
         "endgame_volume": 0.35,       # son volume (plus bas que les cartons)
         "endgame_duck_db": 9,         # baisse max sous ta voix / les tirs (plus doux : le combat est permanent)
+        "shorts_count": 3,            # nombre de Shorts TikTok créés par rec
+        "shorts_layout": "cadre",     # "cadre" (gameplay agrandi + fond flouté) ou "plein" (plein écran, bords coupés)
+        "shorts_captions": True,      # sous-titres animés de ta voix sur les Shorts
+        "subtitles_srt": False,       # fichier .srt de sous-titres à côté du montage (à envoyer sur YouTube)
+        "whisper_model": "small",     # modèle de transcription : base (rapide) / small (conseillé) / medium (précis)
         "music_fade_s": 6,
         "duck_threshold_db": -45,     # au-dessus de ce niveau de son d'origine, la musique baisse
         "duck_slope": 1.0,            # dB de baisse par dB de son au-dessus du seuil
