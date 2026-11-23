@@ -239,10 +239,18 @@ def check(download=True):
     return STATE
 
 
-def check_async(delay=3):
+def check_async(delay=3, every=20 * 60):
+    """Vérifie au démarrage, puis toutes les 20 min tant que l'app est ouverte."""
     def run():
         time.sleep(delay)
-        check()
+        while True:
+            try:
+                check()
+            except Exception:
+                pass
+            if not every:
+                return
+            time.sleep(every)
     threading.Thread(target=run, daemon=True).start()
 
 

@@ -7,11 +7,23 @@ Arène Box Fight (rang + manches) et Créatif 1v1 (score lu en haut de l'écran)
 | Fichier | Quand | Durée |
 |---|---|---|
 | **STUDIO.bat** | Tester une modif : **Pull origin** puis double-clic. L'app s'ouvre directement depuis le code. | quelques s |
-| **PUBLIER_MAJ.bat** | Envoyer la modif à ton app installée et à tes clients. Aucune question : version et notes automatiques. | ~30 s |
+| *(rien)* | **Mises à jour automatiques** : chaque envoi de code sur GitHub publie une mise à jour toute seule (GitHub Actions). Les apps la récupèrent au lancement et toutes les 20 min. | ~1 min |
+| **PUBLIER_MAJ.bat** | Secours : publier à la main depuis ton PC (version et notes automatiques). | ~30 s |
 | **BUILD_EXE.bat** | Seulement quand une nouvelle bibliothèque arrive (je te le dis). `BUILD_EXE.bat clean` = build complet. | 1er build long, ensuite plus court |
 | **PUBLIER_INSTALLATEUR.bat** | Après un BUILD_EXE : fabrique l'installateur et le met en ligne (lien copié) : https://github.com/camraa/montage-studio-maj/releases/tag/installateur | quelques min |
 
 Une mise à jour peut ajouter de nouveaux fichiers de code : pas besoin de réinstaller l'app pour ça.
+
+## Mises à jour automatiques (à régler une seule fois)
+1. GitHub → photo de profil → **Settings** → **Developer settings** → **Personal access tokens** →
+   **Fine-grained tokens** → **Generate new token**. Nom : `montage-maj`, expiration : 1 an (ou plus),
+   **Only select repositories** → `montage-studio-maj`, Permissions → **Contents : Read and write**.
+   Copie le jeton (`github_pat_...`).
+2. Dépôt `camraa/montage-studio` → **Settings** → **Secrets and variables** → **Actions** →
+   **New repository secret** : nom `MAJ_TOKEN`, valeur = le jeton.
+3. Onglet **Actions** du dépôt → « Publier la mise à jour » → **Run workflow** pour tester.
+
+Pour envoyer du code sans publier de mise à jour : `[no-maj]` dans le message du commit.
 
 ## Sur un nouveau PC
 GitHub Desktop → Clone → `camraa/montage-studio`, puis **STUDIO.bat** (installe ce qu'il faut au 1er lancement).
