@@ -127,6 +127,8 @@ def build(cfg):
 
     out = wd / "edit_plan.json"
     out.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
+    import progress
+    progress.record(cfg, plan, tl)
     h, rem = divmod(int(total), 3600)
     print(f"[OK] {out.name} -> durée du montage : {h} h {rem // 60:02d} min")
     return out

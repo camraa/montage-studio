@@ -49,6 +49,7 @@
           <a data-cmd="render">Lancer le rendu<kbd>Ctrl R</kbd></a>
           <a data-cmd="all">Analyser + rendre</a>
           <a data-cmd="shorts">Créer les Shorts TikTok</a>
+          <a data-cmd="youtube-text">Titre, description et tags YouTube<kbd>Y</kbd></a>
           <a data-cmd="proxy">Créer un aperçu léger (proxy)</a>
           <hr>
           <a data-cmd="tab-queue">File d'attente</a>
@@ -60,6 +61,7 @@
           <a data-cmd="view-card">Carton<kbd>2</kbd></a>
           <a data-cmd="view-thumbs">Miniatures YouTube<kbd>3</kbd></a>
           <a data-cmd="view-banners">Studio de bannières<kbd>4</kbd></a>
+          <a data-cmd="view-progress">Progression<kbd>5</kbd></a>
           <hr>
           <a data-cmd="zoom-fit">Timeline : tout afficher<kbd>0</kbd></a>
           <hr>
@@ -118,6 +120,7 @@
         <button data-view="card">Carton</button>
         <button data-view="thumbs">Miniatures</button>
         <button data-view="banners">Bannières</button>
+        <button data-view="progress">Progression</button>
       </div>
       <span class="viewer-spacer"></span>
     </div>
@@ -195,6 +198,16 @@
             <div class="bn-bar"><span class="muted" id="bn-info"></span>
               <button class="btn primary" data-cmd="bn-export">Exporter</button></div>
           </section>
+        </div>
+      </div>
+      <div class="view" id="view-progress">
+        <div class="pg-wrap scroll">
+          <div class="pg-head"><div class="segmented" id="pg-modes"></div>
+            <button class="btn" data-cmd="pg-banner">Miniature de progression</button></div>
+          <div class="pg-tiles" id="pg-tiles"></div>
+          <div class="pg-chart"><div class="pg-title" id="pg-ctitle"></div><div id="pg-chart"></div><div class="pg-tip hidden" id="pg-tip"></div></div>
+          <table class="pg-table" id="pg-table"></table>
+          <p class="muted" id="pg-empty"></p>
         </div>
       </div>
     </div>

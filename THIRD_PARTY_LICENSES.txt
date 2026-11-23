@@ -19,6 +19,6 @@ Police "Inter" (The Inter Project Authors) - SIL Open Font License 1.1 - voir st
 
 Musiques intégrées (intro, outro, lofi, synthwave, trap, house, epic) : compositions originales
 générées par code pour Montage Studio, utilisables librement dans tes vidéos.
-faster-whisper (SYSTRAN) - MIT ; CTranslate2 (OpenNMT) - MIT ; modèles Whisper (OpenAI) - MIT
+faster-whisper (SYSTRAN) - MIT (inclut le détecteur de parole Silero VAD - MIT) ; CTranslate2 (OpenNMT) - MIT ; modèles Whisper (OpenAI) - MIT
 ONNX Runtime (Microsoft) - MIT ; PyAV - BSD
 Modèle de détourage IS-Net / DIS (xuebinqin) - Apache 2.0, fichier distribué par le projet rembg (MIT)

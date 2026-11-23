@@ -29,34 +29,54 @@ def font(size, kind="title"):
 
 
 # ------------------------------------------------------------------ choix des moments
-def moments(timeline, n=3, min_len=18, max_len=58):
-    """Enchaînements de kills (écart <= 22 s) notés : kills, rapidité, fin de partie."""
+def _fit(s, e, g, min_len, max_len):
+    if e - s < min_len:
+        pad = (min_len - (e - s)) / 2
+        s, e = s - pad, e + pad
+    if e - s > max_len:
+        s = e - max_len
+    return max(g["start"], s), min(g["end"] + 5, e)
+
+
+def moments(timeline, n=3, min_len=18, max_len=58, voice=None):
+    """Enchaînements de kills (écart <= 22 s) notés : kills, rapidité, fin de partie,
+    + tes réactions au son (voice.py) : bonus si tu réagis pendant le fight, ou moment à part entière."""
     cands = []
+    voice = voice or []
     for g in timeline.get("games", []):
         ks = sorted(k["t"] for k in g.get("kills", []))
-        if not ks:
-            continue
-        groups, cur = [], [ks[0]]
+        g_voice = [p for p in voice if g["start"] <= p["t"] <= g["end"] + 5]
+        groups, cur = [], ks[:1]
         for t in ks[1:]:
             if t - cur[-1] <= 22:
                 cur.append(t)
             else:
                 groups.append(cur)
                 cur = [t]
-        groups.append(cur)
+        if cur:
+            groups.append(cur)
+        used = set()
         for grp in groups:
             span = grp[-1] - grp[0]
             late = max(0.0, 1 - (g["end"] - grp[-1]) / 300)          # bonus fin de partie (zones finales)
             score = len(grp) * 3 + (4 if len(grp) >= 2 and span <= 10 else 0) + late * 3
             s, e = grp[0] - 9, grp[-1] + 5
-            if e - s < min_len:
-                pad = (min_len - (e - s)) / 2
-                s, e = s - pad, e + pad
-            if e - s > max_len:
-                s = e - max_len
-            s, e = max(g["start"], s), min(g["end"] + 5, e)
+            react = [p for p in g_voice if s - 3 <= p["t"] <= e + 4]
+            if react:                                                 # tu réagis pendant le fight
+                best = max(react, key=lambda p: p["strength"])
+                score += 2 + min(4.0, best["strength"] / 5)
+                e = max(e, min(best["end"] + 2, s + max_len))
+                used.update(id(p) for p in react)
+            s, e = _fit(s, e, g, min_len, max_len)
             cands.append({"start": s, "end": e, "kills": len(grp), "span": span, "score": score,
-                          "game": g.get("game"), "late": late > 0.5})
+                          "game": g.get("game"), "late": late > 0.5, "reaction": bool(react)})
+        for p in g_voice:                                             # réaction forte sans kill autour
+            if id(p) in used or p["strength"] < 13:
+                continue
+            s, e = _fit(p["start"] - 12, p["end"] + 6, g, min_len, max_len)
+            cands.append({"start": s, "end": e, "kills": sum(1 for t in ks if s <= t <= e), "span": 0,
+                          "score": 2 + p["strength"] / 4, "game": g.get("game"), "late": False,
+                          "reaction": True, "voice_only": True})
     cands.sort(key=lambda c: -c["score"])
     out = []
     for c in cands:
@@ -69,6 +89,8 @@ def moments(timeline, n=3, min_len=18, max_len=58):
 
 def headline(m):
     k = m["kills"]
+    if m.get("voice_only") and k < 2:
+        return ["ÇA PART EN VRILLE", "MOMENT DE FOLIE", "LA RÉACTION"][int(m["start"]) % 3]
     if k >= 4:
         return f"{k} KILLS EN {max(1, round(m['span']))} SEC"
     if k == 3:
@@ -224,9 +246,13 @@ def run(cfg):
     if not tl_p.exists():
         raise SystemExit("[ERREUR] analyse d'abord le rec (scan), les Shorts utilisent les kills détectés")
     tl = json.loads(tl_p.read_text(encoding="utf-8"))
-    ms = moments(tl, n=int(rc.get("shorts_count", 3)))
+    voice = []
+    if rc.get("shorts_voice", True):
+        import voice as voice_mod
+        voice = voice_mod.load_or_compute(cfg)
+    ms = moments(tl, n=int(rc.get("shorts_count", 3)), voice=voice)
     if not ms:
-        raise SystemExit("[ERREUR] aucun kill détecté dans ce rec : pas de moment fort pour un Short")
+        raise SystemExit("[ERREUR] ni kill ni réaction détectés dans ce rec : pas de moment fort pour un Short")
     video = Path(cfg["video"])
     base = video.parent.parent if video.parent.name == RAW_DIR_NAME else video.parent
     out_dir = base / "Shorts"
@@ -238,7 +264,8 @@ def run(cfg):
         sub = str(cfg["mode_label"]).upper()
     outs = []
     for i, m in enumerate(ms, 1):
-        print(f"[SHORT] {i}/{len(ms)} : {headline(m)} ({m['end'] - m['start']:.0f} s)", flush=True)
+        print(f"[SHORT] {i}/{len(ms)} : {headline(m)} ({m['end'] - m['start']:.0f} s)"
+              + (" + ta réaction" if m.get("reaction") else ""), flush=True)
         print(f"[SHORTS] {(i - 1) / len(ms) * 100:.1f}%", flush=True)
         out = out_dir / f"[SHORT] {video.stem} - {i:02d}.mp4"
         render_short(video, m, out, wd / "shorts" / f"{i:02d}", rc.get("shorts_layout", "cadre"),

@@ -115,6 +115,8 @@ DEFAULT_CONFIG = {
         "shorts_count": 3,            # nombre de Shorts TikTok créés par rec
         "shorts_layout": "cadre",     # "cadre" (gameplay agrandi + fond flouté) ou "plein" (plein écran, bords coupés)
         "shorts_captions": True,      # sous-titres animés de ta voix sur les Shorts
+        "shorts_voice": True,         # Shorts : tes réactions au son (voix qui monte) comptent comme moments forts
+        "voice_track": -1,            # piste audio de ton micro (0 = 1re piste...) ; -1 = la piste du montage
         "subtitles_srt": False,       # fichier .srt de sous-titres à côté du montage (à envoyer sur YouTube)
         "whisper_model": "small",     # modèle de transcription : base (rapide) / small (conseillé) / medium (précis)
         "music_fade_s": 6,

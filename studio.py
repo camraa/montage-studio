@@ -161,10 +161,18 @@ def banners_info(path=None, mode=None):
             pass
     for d_ in (banners.SKIN_DIR, banners.RANK_DIR, banners.CUP_DIR):
         d_.mkdir(parents=True, exist_ok=True)
-    defaults = banners.project_defaults(tl, plan, saved)
+    import progress
+    defaults = banners.project_defaults(tl, plan, saved, progress.summary(mode) if mode else None)
     return {"templates": banners.catalog(defaults), "themes": {k: v["label"] for k, v in banners.THEMES.items()},
             "skins": [{"name": p.name, "path": str(p), "url": furl(p, f"&v={p.stat().st_mtime:.0f}")} for p in banners.skins_list()],
             "skin_dir": str(banners.SKIN_DIR), "assets_dir": str(banners.USER_ASSETS)}
+
+
+def progress_info():
+    import progress
+    ss = progress.sessions()
+    return {"sessions": ss, "modes": {m: progress.summary(m) for m in dict.fromkeys(s["mode"] for s in ss)},
+            "labels": {m: v["label"] for m, v in MODES.items()}}
 
 
 def banner_image(d):
@@ -429,6 +437,15 @@ class H(BaseHTTPRequestHandler):
                                        configured=bool(updater.latest_url())))
             if u.path == "/api/banners":
                 return self._json(banners_info(q.get("path"), q.get("mode")))
+            if u.path == "/api/progress":
+                return self._json(progress_info())
+            if u.path == "/api/youtube":
+                import youtube
+                try:
+                    return self._json(youtube.for_project(make_cfg(q.get("mode"), find_video(q.get("path")))) or
+                                      {"error": "Analyse d'abord ce rec."})
+                except Exception as e:
+                    return self._json({"error": f"{type(e).__name__}: {e}"})
             if u.path == "/api/fonts":
                 return self._json(["LuckiestGuy-Regular.ttf", "Anton-Regular.ttf"])
             return self._json({"error": "route inconnue"}, 404)
@@ -455,7 +472,14 @@ class H(BaseHTTPRequestHandler):
                 plan["user_edited"] = True
                 (work_dir(cfg) / "edit_plan.json").write_text(json.dumps(plan, indent=2, ensure_ascii=False),
                                                              encoding="utf-8")
+                import progress
+                tl_p = work_dir(cfg) / "timeline.json"
+                progress.record(cfg, plan, json.loads(tl_p.read_text(encoding="utf-8")) if tl_p.exists() else None)
                 return self._json({"ok": True})
+            if u.path == "/api/progress/hide":
+                import progress
+                progress.hide(d["id"], d.get("hidden", True))
+                return self._json(progress_info())
             if u.path == "/api/plan/reset":
                 import edit
                 cfg = make_cfg(d["mode"], find_video(d["path"]))

@@ -684,39 +684,24 @@ def music_bed(cfg, clips, total, cmd, plan=None):
 
 
 def write_chapters(cfg, plan, clips, out):
-    """Description YouTube prête à coller : titre proposé + chapitres (une ligne par game)."""
-    t, lines = 0.0, []
-    cup = plan.get("mode") == "cup"
+    """Texte YouTube prêt à coller (titres, description avec chapitres exacts, tags) -> <montage>.txt"""
+    import youtube
+    t, chapters, final_t = 0.0, [], None
     games = iter(plan["games"])
     for c in clips:
-        if "_card" in c.name and not c.name.startswith("99_"):
-            g = next(games)
-            m, s_ = divmod(int(t), 60)
-            h, m = divmod(m, 60)
-            stamp = f"{h}:{m:02d}:{s_:02d}" if h else f"{m:02d}:{s_:02d}"
-            if len(lines) == 0:
-                stamp = "00:00"
-            word = "Partie" if cup else "Match" if g["card"].get("type") == "box" else "Game"
-            sc = (g["card"].get("prev") or {}).get("score")
-            lines.append(f"{stamp} {word} {g['game']}")
+        if c.name.startswith("99_"):
+            final_t = t
+        elif "_card" in c.name:
+            g = next(games, None)
+            if g:
+                chapters.append((t, g["game"]))
         t += duration_of(c)
-    fin = plan.get("final") or {}
-    if fin.get("type") == "box":
-        title = (f"{fin.get('wins', 0)} VICTOIRES EN {plan.get('label', 'BOX FIGHT').upper()}"
-                 + (f" (+{fin['session_gain']}%)" if (fin.get("session_gain") or 0) > 0 else ""))
-    elif cup:
-        title = f"MA CUP FORTNITE : {fin.get('points') or '?'} POINTS en {fin.get('parties', len(plan['games']))} parties"
-    else:
-        g = fin.get("session_gain")
-        rk = (fin.get("rank_end") or {}).get("name")
-        title = (f"+{g}% EN UNE SESSION {plan.get('label', 'RANKED').upper()}" if g and g > 0
-                 else f"SESSION {plan.get('label', 'RANKED').upper()}") + (f" ({rk})" if rk else "")
-    txt = (f"TITRE PROPOSÉ :\n{title}\n\nDESCRIPTION :\n"
-           f"Session {plan.get('label', '')} Fortnite, toutes les games en long format.\n\n"
-           "CHAPITRES :\n" + "\n".join(lines) + "\n")
-    p = Path(str(out)).with_suffix(".txt")
-    p.write_text(txt, encoding="utf-8")
-    print(f"[YOUTUBE] titre + chapitres -> {p.name}")
+    tl_p = work_dir(cfg) / "timeline.json"
+    tl = json.loads(tl_p.read_text(encoding="utf-8")) if tl_p.exists() else None
+    try:
+        youtube.write(cfg, youtube.build(cfg, plan, tl, chapters, final_t), out)
+    except Exception as e:          # le montage est fini : un souci de texte ne doit pas le faire échouer
+        print(f"[YOUTUBE] texte impossible : {type(e).__name__}: {e}")
 
 
 def duration_of(path):
