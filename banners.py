@@ -549,29 +549,51 @@ def catalog(defaults=None):
     return out
 
 
-def project_defaults(timeline, plan, saved=None):
-    """Valeurs préremplies : pseudo/réseaux enregistrés + données du rec analysé (points, rangs, ELO)."""
+def project_defaults(timeline, plan, saved=None, history=None):
+    """Valeurs préremplies : pseudo/réseaux enregistrés, historique de progression (progress.py),
+    puis données du rec ouvert (points, rangs, ELO de la session) qui priment."""
     d = {k: v for k, v in (saved or {}).items() if v not in (None, "")}
-    if not timeline:
+    h = history or {}
+    games = (timeline or {}).get("games") or []
+    fin = (plan or {}).get("final") or {}
+    cup = (timeline or {}).get("mode") == "cup" or (plan or {}).get("mode") == "cup" or h.get("kind") == "cup"
+    if not timeline and not h:
         return d
-    games = timeline.get("games") or []
-    if timeline.get("mode") == "cup" or (plan or {}).get("mode") == "cup":
-        d["points"] = timeline.get("final_points") or ((plan or {}).get("final") or {}).get("points") or ""
+    if cup:
         d.setdefault("theme", "cup")
-    else:
-        d["theme"] = "ranked"
-        rb = next((g.get("rank_before") for g in games if g.get("rank_before")), None)
+        pts = (timeline or {}).get("final_points") or fin.get("points") or h.get("last_points")
+        if pts is not None:
+            d["points"] = pts
+        return d
+    d["theme"] = "ranked"
+
+    def put_current(r):
+        if r and r.get("name"):
+            d["rang_actuel"] = RANK_NAMES[rank_index(r["name"])]
+            d["objectif"] = RANK_NAMES[min(7, rank_index(r["name"]) + 1)]
+            if r.get("pct") is not None and r.get("level", 0) < 17:
+                d["progression"] = r["pct"]
+
+    def put_gain(g):
+        if g is not None:
+            d["gain"] = f"{'+' if g >= 0 else ''}{g}%"
+    # 1) historique : grind depuis la 1re session de ce mode
+    if (h.get("rank_start") or {}).get("name"):
+        d["rang_depart"] = RANK_NAMES[rank_index(h["rank_start"]["name"])]
+    put_current(h.get("rank_end"))
+    put_gain(h.get("last_gain"))
+    if h.get("sessions", 0) > 1:
+        d["jour"] = h["days"]
+        d["duree"] = f"EN {h['days']} JOURS" if h["days"] > 1 else f"EN {h['sessions']} SESSIONS"
+    # 2) rec ouvert : sa session
+    if games:
         ra = next((g.get("rank_after") for g in reversed(games) if g.get("rank_after")), None)
-        if rb and rb.get("name"):
-            d["rang_depart"] = RANK_NAMES[rank_index(rb["name"])]
-        if ra and ra.get("name"):
-            d["rang_actuel"] = RANK_NAMES[rank_index(ra["name"])]
-            d["objectif"] = RANK_NAMES[min(7, rank_index(ra["name"]) + 1)]
-            if ra.get("pct") is not None:
-                d["progression"] = ra["pct"]
-        if any(g.get("gain") is not None for g in games):
-            gain = sum(g.get("gain") or 0 for g in games)
-            d["gain"] = f"{'+' if gain >= 0 else ''}{gain}%"
+        put_current(fin.get("rank_end") or ra)
+        if "rang_depart" not in d:
+            rb = fin.get("rank_start") or next((g.get("rank_before") for g in games if g.get("rank_before")), None)
+            if rb and rb.get("name"):
+                d["rang_depart"] = RANK_NAMES[rank_index(rb["name"])]
+        put_gain(fin.get("session_gain"))
     return d
 
 

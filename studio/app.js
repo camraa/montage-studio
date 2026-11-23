@@ -502,6 +502,8 @@ function renderRenderTab() {
     ${field("Nombre par rec", `<input data-s="render.shorts_count" type="number" min="1" max="10" value="${r.shorts_count ?? 3}">`)}
     ${field("Mise en page", `<select data-s="render.shorts_layout"><option value="cadre" ${r.shorts_layout !== "plein" ? "selected" : ""}>Gameplay agrandi + fond flouté</option><option value="plein" ${r.shorts_layout === "plein" ? "selected" : ""}>Plein écran (bords coupés)</option></select>`)}
     ${field("Sous-titres", `<label class="switch"><input data-s="render.shorts_captions" type="checkbox" ${r.shorts_captions !== false ? "checked" : ""}><i></i><span>ta voix, mot par mot</span></label>`)}
+    ${field("Réactions", `<label class="switch"><input data-s="render.shorts_voice" type="checkbox" ${r.shorts_voice !== false ? "checked" : ""}><i></i><span>tes réactions au son comptent comme moments forts</span></label>`)}
+    ${field("Piste du micro", `<select data-s="render.voice_track">${[-1, 0, 1, 2, 3, 4, 5].map(n => `<option value="${n}" ${Number(r.voice_track ?? -1) === n ? "selected" : ""}>${n < 0 ? "Même piste que le montage" : "Piste " + (n + 1) + (n === 1 ? " (micro seul dans OBS, souvent)" : "")}</option>`).join("")}</select>`)}
     <button class="btn" data-cmd="shorts" style="margin:4px 0 0 136px">Créer les Shorts</button>
     <h4>Sous-titres YouTube</h4>
     ${field("Fichier .srt", `<label class="switch"><input data-s="render.subtitles_srt" type="checkbox" ${r.subtitles_srt ? "checked" : ""}><i></i><span>à côté du montage</span></label>`)}
@@ -524,7 +526,7 @@ function renderRenderTab() {
     } else {
       const [sec, key] = k.split(".");
       body[sec][key] = i.type === "checkbox" ? i.checked
-        : i.type === "range" || i.type === "number" || key === "fps" ? Number(i.value) : i.value;
+        : i.type === "range" || i.type === "number" || key === "fps" || key === "voice_track" ? Number(i.value) : i.value;
     }
     S.settings = await api("/api/settings", body);
     renderRenderTab(); updateStats();
@@ -539,6 +541,35 @@ async function startJob(action) {
   setTab("queue");
   status(`Tâche ajoutée : ${action}`);
   pollJobs();
+}
+
+/* ================= texte YouTube ================= */
+function esc(t) { return String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+
+async function copyText(t, btn) {
+  try { await navigator.clipboard.writeText(t); }
+  catch (e) { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta);
+    ta.select(); document.execCommand("copy"); ta.remove(); }
+  if (btn) { const o = btn.textContent; btn.textContent = "Copié ✓"; setTimeout(() => btn.textContent = o, 1200); }
+}
+
+async function showYoutube(path, mode) {
+  path = path || (S.cur && S.cur.path); mode = mode || (S.cur && S.cur.mode);
+  if (!path) return status("Ouvre d'abord un rec");
+  const d = await api(`/api/youtube?path=${encodeURIComponent(path)}&mode=${mode}`);
+  if (d.error) return modal(`<h3>Texte YouTube</h3><p>${esc(d.error)}</p>`);
+  const tags = d.tags.join(", ");
+  modal(`<h3>Texte YouTube</h3>
+    ${d.estimated ? '<p class="muted">Chapitres estimés depuis le plan : ils seront exacts après le rendu.</p>' : ""}
+    <div class="yt-sec"><b>Titres proposés</b>${d.titles.map((t, i) => `<div class="yt-row"><span>${esc(t)}</span>
+      <button class="btn" data-copy="t${i}">Copier</button></div>`).join("")}</div>
+    <div class="yt-sec"><div class="yt-row"><b>Description</b><button class="btn" data-copy="desc">Copier</button></div>
+      <textarea readonly rows="12">${esc(d.description)}</textarea></div>
+    <div class="yt-sec"><div class="yt-row"><b>Tags</b><button class="btn" data-copy="tags">Copier</button></div>
+      <textarea readonly rows="3">${esc(tags)}</textarea></div>`);
+  const src = { desc: d.description, tags };
+  d.titles.forEach((t, i) => src["t" + i] = t);
+  $$("[data-copy]", $("#modal-body")).forEach(b => b.onclick = () => copyText(src[b.dataset.copy], b));
 }
 
 function fmtDur(sec) {
@@ -572,10 +603,13 @@ async function pollJobs() {
     ${jobDetail(j)}
     ${j.status === "en cours" || j.status === "en attente" ? `<button class="btn ghost" data-job="${j.id}">Annuler</button>` : ""}
     ${j.output ? `<button class="btn" data-open="${encodeURIComponent(j.output)}">Ouvrir le montage</button>` : ""}
+    ${j.output && (j.action === "render" || j.action === "all") && j.status === "terminé" ? `<button class="btn" data-yt="${encodeURIComponent(j.path)}|${j.mode}">Texte YouTube</button>` : ""}
     ${j.status !== "en attente" ? `<details ${j.status === "erreur" ? "open" : ""}><summary class="muted">Détails</summary><pre style="white-space:pre-wrap;font-size:10px;user-select:text">${(j.log || []).slice(-30).join("\n")}</pre></details>` : ""}
     ${j.status === "erreur" ? `<button class="btn" data-diag="${encodeURIComponent(j.path)}|${j.mode}">Ouvrir le diagnostic</button>` : ""}
     </div>`).join("") : '<p class="muted pad">Aucune tâche.</p>';
   $$("[data-job]", el).forEach(b => b.onclick = () => api("/api/job/cancel", { id: b.dataset.job }).then(pollJobs));
+  $$("[data-yt]", el).forEach(b => b.onclick = () => { const [p, m] = b.dataset.yt.split("|");
+    showYoutube(decodeURIComponent(p), m); });
   $$("[data-open]", el).forEach(b => b.onclick = () => api("/api/open", { path: decodeURIComponent(b.dataset.open) }));
   $$("[data-diag]", el).forEach(b => b.onclick = () => { const [p, m] = b.dataset.diag.split("|");
     api("/api/open", { folder: "diag", video: decodeURIComponent(p), mode: m }); });
@@ -602,6 +636,7 @@ function setView(v) {
   $$(".view").forEach(x => x.classList.toggle("active", x.id === "view-" + v));
   if (v === "card") refreshCard();
   if (v === "banners") loadBanners();
+  if (v === "progress") loadProgress();
 }
 function setTab(t) {
   $$("#right-tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
@@ -683,7 +718,7 @@ const CMDS = {
   "open-videos": () => api("/api/open", {}),
   "open-thumbs": () => api("/api/open", { folder: "thumbs" }),
   "scan": () => startJob("scan"), "rescan": () => startJob("rescan"), "all": () => startJob("all"),
-  "render": () => startJob("render"), "proxy": () => startJob("proxy"), "shorts": () => startJob("shorts"),
+  "render": () => startJob("render"), "proxy": () => startJob("proxy"), "shorts": () => startJob("shorts"), "youtube-text": () => showYoutube(),
   "save": () => savePlan().then(() => status("Montage enregistré")),
   "reset": async () => {
     if (!S.cur || !confirm("Remplacer le montage par le montage automatique ? (tes retouches seront perdues)")) return;
@@ -742,7 +777,8 @@ const CMDS = {
   "prev-seg": () => { const t = player().currentTime, s = allSegs().filter(x => x.start < t - 0.5).pop(); if (s) seek(s.start); },
   "zoom-in": () => setZoom(+$("#zoom").value + 12), "zoom-out": () => setZoom(+$("#zoom").value - 12),
   "zoom-fit": () => { fitZoom(); renderTimeline(); },
-  "view-video": () => setView("video"), "view-card": () => setView("card"), "view-thumbs": () => setView("thumbs"), "view-banners": () => setView("banners"),
+  "view-video": () => setView("video"), "view-card": () => setView("card"), "view-thumbs": () => setView("thumbs"), "view-banners": () => setView("banners"), "view-progress": () => setView("progress"),
+  "pg-banner": () => progressBanner(),
   "tab-queue": () => setTab("queue"),
   "th-generate": genThumbs,
   "th-add-time": () => { S.thTimes.push(player().currentTime); renderThumbGrid(); },
@@ -766,13 +802,117 @@ const CMDS = {
   "modal-close": () => $("#modal").classList.add("hidden"),
 };
 
+/* ================= progression ================= */
+const PG = { data: null, mode: null };
+const TIERS = ["BRONZE", "ARGENT", "OR", "PLATINE", "DIAMANT"], ROMAN = ["I", "II", "III"];
+const rankName = l => l == null ? "" : l < 15 ? `${TIERS[Math.floor(l / 3)]} ${ROMAN[l % 3]}` : ["ÉLITE", "CHAMPION", "UNREAL"][Math.min(l - 15, 2)];
+const rankScore = r => r && r.level != null && r.pct != null && r.level < 17 ? r.level * 100 + r.pct : r && r.level >= 17 ? 1700 : null;
+const rankTxt = r => r && r.name ? r.name + (r.pct != null && r.level < 17 ? ` ${r.pct}%` : "") : "—";
+const signed = (v, u = "%") => v == null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v)}${u}`;
+const fdate = d => { const [y, m, j] = d.split("-"); return `${j}/${m}`; };
+
+async function loadProgress() {
+  PG.data = await api("/api/progress");
+  const modes = Object.keys(PG.data.modes);
+  if (!PG.mode || !modes.includes(PG.mode)) PG.mode = (S.cur && modes.includes(S.cur.mode)) ? S.cur.mode
+    : (PG.data.sessions.slice().sort((a, b) => a.date < b.date ? -1 : 1).pop() || {}).mode;
+  $("#pg-modes").innerHTML = modes.map(m => `<button data-pm="${m}" class="${m === PG.mode ? "active" : ""}">${PG.data.labels[m] || m}</button>`).join("");
+  $$("[data-pm]").forEach(b => b.onclick = () => { PG.mode = b.dataset.pm; loadProgress(); });
+  $("#pg-empty").textContent = modes.length ? "" : "Aucune session pour l'instant : chaque rec analysé s'ajoute ici automatiquement.";
+  $(".pg-head .btn").classList.toggle("hidden", !modes.length);
+  renderProgress();
+}
+
+function renderProgress() {
+  const ss = (PG.data.sessions || []).filter(s => s.mode === PG.mode);
+  const sm = PG.data.modes[PG.mode] || {};
+  const kind = ss.length ? ss[0].kind : null;
+  if (!ss.length) { ["#pg-tiles", "#pg-chart", "#pg-table", "#pg-ctitle"].forEach(q => $(q).innerHTML = ""); return; }
+  const tile = (l, v, sub = "") => `<div class="pg-tile"><span>${l}</span><b>${v}</b>${sub ? `<i>${sub}</i>` : ""}</div>`;
+  let tiles = "";
+  if (kind === "cup") {
+    tiles = tile("Meilleur score", sm.best_points != null ? `${sm.best_points} pts` : "—") + tile("Moyenne", sm.avg_points != null ? `${sm.avg_points} pts` : "—")
+      + tile("Cups jouées", sm.sessions) + tile("Kills", sm.kills, `${sm.games} parties`);
+  } else {
+    tiles = tile("Rang actuel", rankTxt(sm.rank_end)) + tile("Depuis le début", sm.gain_total != null ? signed(sm.gain_total)
+      : sm.divisions != null ? signed(sm.divisions, sm.divisions > 1 || sm.divisions < -1 ? " divisions" : " division") : "—", `départ : ${rankTxt(sm.rank_start)}`)
+      + tile("Jour du grind", sm.days, `depuis le ${fdate(sm.first_date)}`) + tile("Sessions", sm.sessions, `${sm.games} games`) + tile("Kills", sm.kills);
+    if (kind === "box") tiles += tile("Victoires", ss.reduce((a, s) => a + (s.wins || 0), 0), `${ss.reduce((a, s) => a + (s.losses || 0), 0)} défaites`);
+  }
+  $("#pg-tiles").innerHTML = tiles;
+  // ---- graphique : une seule série, pas de légende (le titre la nomme)
+  const W = Math.max(420, $("#pg-chart").clientWidth || 700), H = 280, L = 92, R = 16, T = 12, B = 28;
+  const pw = W - L - R, ph = H - T - B;
+  const pts = ss.map((s, i) => ({ s, i, v: kind === "cup" ? s.points : kind === "box" && !s.rank_end ? s.wins : rankScore(s.rank_end || s.rank_start) }))
+    .filter(p => p.v != null);
+  const bars = kind === "cup" || (kind === "box" && !ss.some(s => s.rank_end));
+  $("#pg-ctitle").textContent = kind === "cup" ? "Points par cup" : bars ? "Victoires par session" : "Rang en fin de session";
+  if (!pts.length) { $("#pg-chart").innerHTML = '<p class="muted">Pas encore de valeur lue pour ce mode.</p>'; }
+  else {
+    let lo = bars ? 0 : Math.min(...pts.map(p => p.v)), hi = Math.max(...pts.map(p => p.v));
+    let ticks = [];
+    if (bars) { hi = Math.max(1, hi) * 1.1; const st = Math.pow(10, Math.floor(Math.log10(hi / 4))); const step = [1, 2, 5, 10].map(k => k * st).find(k => hi / k <= 5);
+      for (let v = 0; v <= hi; v += step) ticks.push({ v, t: String(Math.round(v)) }); }
+    else {
+      const span = hi - lo, step = span > 900 ? 300 : 100;
+      lo = Math.max(0, Math.floor((lo - 10) / step) * step); hi = Math.min(1700, Math.ceil((hi + 10) / step) * step); if (hi - lo < step) lo = Math.max(0, hi - step);
+      for (let v = lo; v <= hi; v += step) ticks.push({ v, t: step === 300 && v < 1500 ? TIERS[v / 300] || "" : rankName(Math.floor(v / 100)) });
+    }
+    const n = ss.length, xb = pw / n;
+    const X = i => L + xb * (i + 0.5), Y = v => T + ph - (v - lo) / (hi - lo) * ph;
+    let g = ticks.map(t => `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(t.v)}" y2="${Y(t.v)}"/><text class="axis" x="${L - 8}" y="${Y(t.v) + 3}" text-anchor="end">${t.t}</text>`).join("");
+    const every = Math.ceil(n / Math.max(1, Math.floor(pw / 54)));
+    g += ss.map((s, i) => i % every ? "" : `<text class="axis" x="${X(i)}" y="${H - 8}" text-anchor="middle">${fdate(s.date)}</text>`).join("");
+    if (bars) {
+      const bw = Math.max(4, Math.min(36, xb - 2));
+      g += pts.map(p => { const y = Y(p.v), h = T + ph - y, r = Math.min(4, bw / 2, h);
+        return `<path class="bar" data-i="${p.i}" d="M${X(p.i) - bw / 2},${T + ph} V${y + r} q0,-${r} ${r},-${r} H${X(p.i) + bw / 2 - r} q${r},0 ${r},${r} V${T + ph} Z"/>`; }).join("");
+      g += pts.map(p => `<rect class="hit" data-i="${p.i}" x="${X(p.i) - xb / 2}" y="${T}" width="${xb}" height="${ph}"/>`).join("");
+    } else {
+      g += `<path class="line" d="${pts.map((p, k) => `${k ? "L" : "M"}${X(p.i)},${Y(p.v)}`).join(" ")}"/>`;
+      g += pts.map(p => `<rect class="hit" data-i="${p.i}" x="${X(p.i) - xb / 2}" y="${T}" width="${xb}" height="${ph}"/><circle class="dot" data-i="${p.i}" cx="${X(p.i)}" cy="${Y(p.v)}" r="4"/>`).join("");
+    }
+    $("#pg-chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">${g}</svg>`;
+    const tip = $("#pg-tip");
+    $$("#pg-chart .hit").forEach(h => {
+      h.onmouseenter = () => {
+        const s = ss[+h.dataset.i];
+        $$(`#pg-chart [data-i]`).forEach(e => e.classList.toggle("on", e.dataset.i === h.dataset.i && !e.classList.contains("hit")));
+        tip.innerHTML = `<b>${fdate(s.date)}</b> · ${s.games} games · ${s.kills} kills<br>` + (kind === "cup" ? `${s.points ?? "—"} points`
+          : kind === "box" && !s.rank_end ? `${s.wins ?? 0} victoires, ${s.losses ?? 0} défaites`
+          : `${rankTxt(s.rank_start)} → ${rankTxt(s.rank_end)} (${signed(s.gain)})`) + `<br><span class="muted">${esc(s.rec)}</span>`;
+        tip.classList.remove("hidden");
+        const bx = (+h.getAttribute("x") + +h.getAttribute("width") / 2) / W * $("#pg-chart").clientWidth;
+        tip.style.left = Math.min(Math.max(8, bx + 12), $("#pg-chart").clientWidth - tip.offsetWidth) + "px"; tip.style.top = "40px";
+      };
+      h.onmouseleave = () => { tip.classList.add("hidden"); $$("#pg-chart .on").forEach(e => e.classList.remove("on")); };
+    });
+  }
+  // ---- tableau (aussi la version texte du graphique)
+  const res = s => kind === "cup" ? `${s.points ?? "—"} pts` : kind === "box" && !s.rank_end ? `${s.wins ?? 0} V / ${s.losses ?? 0} D`
+    : `${rankTxt(s.rank_start)} → ${rankTxt(s.rank_end)} <span class="${(s.gain || 0) >= 0 ? "up" : "down"}">${signed(s.gain)}</span>`;
+  $("#pg-table").innerHTML = `<tr><th>Date</th><th>Rec</th><th>Games</th><th>Kills</th><th>Résultat</th><th></th></tr>` +
+    ss.slice().reverse().map(s => `<tr><td>${fdate(s.date)}</td><td class="rec" title="${esc(s.rec)}">${esc(s.rec)}</td><td>${s.games}</td>
+      <td>${s.kills}</td><td>${res(s)}</td><td><button class="btn ghost" data-pghide="${esc(s.id)}" title="Retirer de la progression (le rec n'est pas supprimé)">Retirer</button></td></tr>`).join("");
+  $$("[data-pghide]").forEach(b => b.onclick = async () => { PG.data = await api("/api/progress/hide", { id: b.dataset.pghide }); loadProgress(); });
+}
+
+function progressBanner() {
+  const ss = (PG.data && PG.data.sessions || []).filter(s => s.mode === PG.mode);
+  BN.mode = PG.mode; BN.force = true;
+  BN.tid = ss.length && ss[0].kind === "cup" ? "cup_leaderboard" : "ranked_grind";
+  setView("banners");
+}
+
 function renderAll() { renderTimeline(); renderProps(); updateStats(); }
 
 /* ================= studio de bannières ================= */
 const BN = { info: null, tid: null, values: {}, skins: [], bg: "theme", timer: null, seq: 0 };
 const bnTpl = () => BN.info && BN.info.templates.find(t => t.id === BN.tid);
 async function loadBanners() {
-  const q = S.cur ? `?path=${encodeURIComponent(S.cur.path)}&mode=${S.cur.mode}` : "";
+  const useCur = S.cur && (!BN.force || S.cur.mode === BN.mode);     // bannière lancée depuis la Progression
+  BN.force = false;
+  const q = useCur ? `?path=${encodeURIComponent(S.cur.path)}&mode=${S.cur.mode}` : BN.mode ? `?mode=${BN.mode}` : "";
   BN.info = await api("/api/banners" + q);
   const sel = $("#bn-template");
   const groups = {};
@@ -783,8 +923,8 @@ async function loadBanners() {
   sel.value = BN.tid;
   sel.onchange = () => { BN.tid = sel.value; renderBnFields(); renderBnSkins(); bnPreview(); };
   // valeurs auto (points, rangs du rec ouvert) : remplacent celles d'un autre rec
-  const proj = S.cur ? S.cur.path : "";
-  if (BN.proj !== proj) { BN.proj = proj; for (const k of ["points", "rang_depart", "rang_actuel", "objectif", "progression", "gain", "theme"]) delete BN.values[k]; }
+  const proj = useCur ? S.cur.path : "mode:" + (BN.mode || "");
+  if (BN.proj !== proj) { BN.proj = proj; for (const k of ["points", "rang_depart", "rang_actuel", "objectif", "progression", "gain", "theme", "jour", "duree"]) delete BN.values[k]; }
   BN.skins = BN.skins.filter(p => BN.info.skins.some(s => s.path === p));
   renderBnFields(); renderBnSkins(); bnPreview();
 }
@@ -936,10 +1076,11 @@ document.addEventListener("keydown", e => {
   if (k === "ArrowLeft") return seek(player().currentTime - (e.shiftKey ? 5 : 1));
   if (k === "ArrowRight") return seek(player().currentTime + (e.shiftKey ? 5 : 1));
   const map = { s: "split", S: "split", Delete: "delete", Backspace: "delete", a: "add", A: "add", "+": "zoom-in", "=": "zoom-in",
-    "-": "zoom-out", "0": "zoom-fit", "1": "view-video", "2": "view-card", "3": "view-thumbs", "4": "view-banners", F5: "refresh" };
+    "-": "zoom-out", "0": "zoom-fit", "1": "view-video", "2": "view-card", "3": "view-thumbs", "4": "view-banners", "5": "view-progress", y: "youtube-text", Y: "youtube-text", F5: "refresh" };
   if (map[k]) { e.preventDefault(); CMDS[map[k]](); }
 });
-window.addEventListener("resize", () => { if (S.proj) { const v = +$("#zoom").value; fitZoom(); setZoom(v); } });
+window.addEventListener("resize", () => { if ($("#view-progress").classList.contains("active") && PG.data) renderProgress();
+  if (S.proj) { const v = +$("#zoom").value; fitZoom(); setZoom(v); } });
 window.addEventListener("beforeunload", () => { if (S.dirty) navigator.sendBeacon && savePlan(); });
 
 (async () => {

@@ -30,6 +30,14 @@ Après des modifs : **Commit** → **Push**, puis **Pull** sur l'autre PC.
 ## Pour les réseaux
 - **Shorts TikTok** (Rendu → Créer les Shorts) : les meilleurs enchaînements de kills en vidéos verticales
   1080x1920 avec gros titre auto et **sous-titres de ta voix** mot par mot → `Vidéos\Shorts`.
+  Tes **réactions au son** (voix qui monte d'un coup) comptent aussi : bonus pour un fight où tu réagis,
+  et une grosse réaction sans kill peut devenir un Short. Piste du micro réglable (onglet Rendu → Shorts).
+- **Texte YouTube** (touche Y, ou bouton « Texte YouTube » dans la file après un rendu) : 3 titres,
+  description avec chapitres détaillés (kills, points / ELO par game), tags — boutons Copier.
+  Aussi enregistré dans `<montage>.txt` à côté de la vidéo.
+- **Progression** (onglet Progression, touche 5) : chaque rec analysé s'ajoute tout seul — rang en fin de
+  session (Ranked), points par cup, kills, jours de grind. « Miniature de progression » ouvre une miniature
+  préremplie (rang de départ du grind, rang actuel, jour du grind, ELO de la dernière session).
 - **Sous-titres YouTube** : option « Fichier .srt » dans l'onglet Rendu (à envoyer avec la vidéo).
 - **Compteur en direct** pendant les games : partie, kills (s'allume à chaque kill), points ou rang.
 - **Carton de fin de Cup** avec le graphique des points partie par partie.

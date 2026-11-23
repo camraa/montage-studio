@@ -34,3 +34,4 @@ build_assets/
 whisper_models/
 rembg_models/
 assets/
+progression.json
