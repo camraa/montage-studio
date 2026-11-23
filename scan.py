@@ -84,7 +84,29 @@ def keyframe_interval(video, probe_s=60):
     return (ts[-1] - ts[0]) / (len(ts) - 1)
 
 
-def scan(cfg):
+def _partial(tmp_path, step):
+    """Scan interrompu : (lignes valides, dernier instant lu) si on peut le reprendre, sinon None."""
+    try:
+        lines = tmp_path.read_text(encoding="utf-8").splitlines()
+        meta = json.loads(lines[0])["_meta"]
+        if abs(meta["step"] - step) > 1e-6:
+            return None
+    except (OSError, ValueError, KeyError, IndexError):
+        return None
+    good = []
+    for l in lines[1:]:
+        try:
+            r = json.loads(l)              # la dernière ligne peut être coupée net par le plantage
+        except ValueError:
+            break
+        if "t" in r:
+            good.append(l)
+    if len(good) < 10:
+        return None
+    return lines[:1] + good, json.loads(good[-1])["t"]
+
+
+def scan(cfg, resume=True):
     sc, rois = cfg["scan"], cfg["rois"]
     if "hud" not in rois:
         raise SystemExit("[ERREUR] zone 'hud' absente de config.json (lance 1_calibrate.py)")
@@ -119,10 +141,18 @@ def scan(cfg):
     diag_at = {int(total * f) for f in (0.15, 0.3, 0.45, 0.6, 0.75, 0.9)}
     stats = {"hud": 0, "rank": 0, "score": 0, "lobby": 0}
     t0 = time.time()
-    n = 0
-    with tmp_path.open("w", encoding="utf-8") as out:
-        out.write(json.dumps({"_meta": {"step": step}}) + "\n")
-        for t, frame in frame_reader(video, w, h, fps=sc["fps"], keyframes=keyframes):
+    n, start = 0, 0.0
+    part = _partial(tmp_path, step) if resume and tmp_path.exists() else None
+    if part:
+        lines, last_t = part
+        tmp_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        n, start = len(lines) - 1, last_t + step / 2
+        print(f"[REPRISE] scan interrompu retrouvé : reprise à {fmt_tc(last_t)[:8]} ({n} images déjà lues)", flush=True)
+    n0 = n
+    with tmp_path.open("a" if part else "w", encoding="utf-8") as out:
+        if not part:
+            out.write(json.dumps({"_meta": {"step": step}}) + "\n")
+        for t, frame in frame_reader(video, w, h, fps=sc["fps"], keyframes=keyframes, start=start):
             players, kills = ocr.read_hud_column(crop(frame, rois["hud"]))
             rec = {"t": round(t, 3), "players": players, "kills": kills}
             if box:
@@ -171,14 +201,15 @@ def scan(cfg):
             n += 1
             if n % 50 == 0:
                 el = time.time() - t0
-                eta = el / n * max(0, total - n)
-                print(f"  {fmt_tc(t)[:8]}  {n}/{total}  {n / el:5.1f} img/s  reste ~{eta / 60:4.1f} min"
+                done = max(1, n - n0)
+                eta = el / done * max(0, total - n)
+                print(f"  {fmt_tc(t)[:8]}  {n}/{total}  {done / el:5.1f} img/s  reste ~{eta / 60:4.1f} min"
                       f"  | joueurs={players} kills={kills} score={rec.get('score')}")
                 out.flush()
     if n == 0 and keyframes:
         print("[SCAN] décodage des images clés impossible avec ce codec -> mode 1 img/s")
         cfg["scan"]["mode"] = "fps"
-        return scan(cfg)
+        return scan(cfg, resume=False)
     if n == 0:
         tmp_path.unlink(missing_ok=True)
         raise SystemExit("[ERREUR] aucune image décodée (vidéo illisible ?)")
@@ -660,15 +691,15 @@ def video_path_of(raw):
 _CURRENT_VIDEO = {}
 
 
-def run(cfg, rescan=False):
+def run(cfg, rescan=False, resume=False):
     wd = work_dir(cfg)
     raw = wd / RAW_NAME
     _CURRENT_VIDEO["path"] = cfg["video"]
     if not rescan and raw.exists() and not scan_complete(raw):
-        print("[SCAN] scan précédent incomplet (interrompu) -> on recommence")
+        print("[SCAN] ancien scan incomplet -> on recommence")
         rescan = True
     if rescan or not raw.exists():
-        raw = scan(cfg)
+        raw = scan(cfg, resume=resume or not rescan)
     else:
         print(f"[SCAN] déjà fait ({raw.name}) -> réanalyse")
     samples = [json.loads(l) for l in raw.read_text(encoding="utf-8").splitlines() if l.strip()]

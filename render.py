@@ -6,6 +6,7 @@
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -759,6 +760,59 @@ def bleep_windows(cfg, video, clips, jobs):
         return []
 
 
+class Resume:
+    """Reprise après plantage : chaque morceau est écrit sous un nom temporaire puis renommé,
+    et noté dans render_state.json. Au relancement, les morceaux finis (même plan, mêmes réglages)
+    sont gardés ; seuls les autres sont refaits."""
+    SKIP = ("output", "intro", "outro", "music", "endgame", "bleep", "shorts", "subtitles", "whisper", "voice")
+
+    def __init__(self, clips_dir, cfg, plan, kind):
+        import hashlib
+        self.p = clips_dir / "render_state.json"
+        rc = {k: v for k, v in cfg["render"].items() if not k.startswith(self.SKIP)}
+        try:
+            st = Path(cfg["video"]).stat()
+            vid = [cfg["video"], st.st_size, int(st.st_mtime)]
+        except OSError:
+            vid = [cfg["video"]]
+        blob = json.dumps({"plan": plan, "rc": rc, "kind": kind, "video": vid}, sort_keys=True, default=str)
+        self.key = hashlib.sha1(blob.encode("utf-8")).hexdigest()
+        self.lock = threading.Lock()
+        try:
+            old = json.loads(self.p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            old = {}
+        self.done = old.get("done", {}) if old.get("key") == self.key else {}
+        keep = {n for n, size in self.done.items() if (clips_dir / n).exists() and (clips_dir / n).stat().st_size == size}
+        self.done = {n: self.done[n] for n in keep}
+        for f in list(clips_dir.glob("*.mp4")) + list(clips_dir.glob("*.wav")):
+            if f.name not in keep:
+                f.unlink()
+        self._save()
+        if keep:
+            print(f"[REPRISE] rendu interrompu retrouvé : {len(keep)} morceau(x) déjà prêt(s), on continue", flush=True)
+
+    def _save(self):
+        tmp = self.p.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"key": self.key, "done": self.done}), encoding="utf-8")
+        tmp.replace(self.p)
+
+    def is_done(self, out):
+        return out.name in self.done
+
+    def tmp(self, out):
+        return out.with_name(out.stem + ".partiel.mp4")
+
+    def finish(self, tmp, out):
+        tmp.replace(out)
+        with self.lock:
+            self.done[out.name] = out.stat().st_size
+            self._save()
+
+    def clear(self):
+        self.p.unlink(missing_ok=True)
+
+
 def render(cfg, cpu=False, reencode_final=False):
     from common import detect_encoder
     kind = "x264" if cpu else detect_encoder()
@@ -777,14 +831,19 @@ def render(cfg, cpu=False, reencode_final=False):
               "Paramètres > Vidéo > Résolution de sortie (mise à l'échelle) = la résolution de base (1920x1080 ou plus).")
     clips_dir = work_dir(cfg) / "clips"
     clips_dir.mkdir(exist_ok=True)
-    for old in list(clips_dir.glob("*.mp4")) + list(clips_dir.glob("*.wav")):
-        old.unlink()
+    rs = Resume(clips_dir, cfg, plan, kind)
+
+    def card_clip(card, out, final=False):
+        if not rs.is_done(out):
+            t = rs.tmp(out)
+            render_card(rc, card, t, kind, final=final)
+            rs.finish(t, out)
 
     counters = counter_data(cfg, plan)
     clips, jobs = [], []
     for gi, g in enumerate(plan["games"]):
         card = clips_dir / f"{gi:02d}_card.mp4"
-        render_card(rc, g["card"], card, kind)
+        card_clip(g["card"], card)
         clips.append(card)
         for j, seg in enumerate(g["segments"]):
             out = clips_dir / f"{gi:02d}_partie{g['game']:02d}_s{j:02d}.mp4"
@@ -792,7 +851,7 @@ def render(cfg, cpu=False, reencode_final=False):
             clips.append(out)
     if plan.get("final"):
         fc = clips_dir / "99_final_card.mp4"
-        render_card(rc, plan["final"], fc, kind, final=True)
+        card_clip(plan["final"], fc, final=True)
         clips.append(fc)
 
     # encodage des segments en parallèle : 1 encodage par puce NVENC (la 5070 Ti en a 2)
@@ -815,12 +874,20 @@ def render(cfg, cpu=False, reencode_final=False):
               f"reste {int(eta // 3600)}:{int(eta % 3600 // 60):02d}:{int(eta % 60):02d}  "
               f"({len(jobs)} morceaux, {workers} en parallèle)   ", end="", flush=True)
 
+    for seg, out, _ in jobs:                  # morceaux déjà faits avant le plantage
+        if rs.is_done(out):
+            prog[out] = seg["end"] - seg["start"]
+
     def job(seg, out, counter):
+        if rs.is_done(out):
+            return
         def cb(done):
             with lock:
                 prog[out] = min(done, seg["end"] - seg["start"])
                 show()
-        render_segment(rc, video, info, seg, out, kind, progress=cb, counter=counter)
+        t = rs.tmp(out)
+        render_segment(rc, video, info, seg, t, kind, progress=cb, counter=counter)
+        rs.finish(t, out)
         with lock:
             prog[out] = seg["end"] - seg["start"]
             show(force=True)
@@ -855,14 +922,17 @@ def render(cfg, cpu=False, reencode_final=False):
         cmd += ["-filter_complex", ";".join(mix), "-map", "0:v", "-map", "[a]", *vcodec, *AUDIO]
     else:
         cmd += ["-map", "0:v", "-map", "0:a", *vcodec, "-c:a", "copy"]
-    cmd += ["-movflags", "+faststart", out]
+    final_tmp = Path(out).with_name(Path(out).stem + " (en cours).mp4")
+    cmd += ["-movflags", "+faststart", final_tmp]
     print("[FINAL] assemblage + musique...")
     run(cmd, duration=total, label="final")
+    os.replace(final_tmp, out)
     write_chapters(cfg, plan, clips, out)
     print(f"\n[OK] Montage terminé : {out}  ({fmt_tc(total)[:8]})")
     print(f"[OUTPUT] {out}")
     for old in list(clips_dir.glob("*.mp4")) + list(clips_dir.glob("*.wav")):
         old.unlink()          # libère la place (les clips intermédiaires sont énormes)
+    rs.clear()
     import shutil
     for d in clips_dir.glob("*_counter"):
         shutil.rmtree(d, ignore_errors=True)
