@@ -227,6 +227,7 @@ def settings_set(data):
 
 # ------------------------------------------------------------------ file d'attente des tâches
 JOBS, QUEUE = [], []
+JOB_HOOKS = []          # fonctions appelées à la fin de chaque tâche (notification de la fenêtre)
 JOBS_P = DATA_DIR / "jobs.json"
 
 
@@ -361,6 +362,11 @@ def worker():
         if p.returncode == 0:
             j["pct"] = 100.0
         save_jobs()
+        for h in list(JOB_HOOKS):
+            try:
+                h(j)
+            except Exception:
+                pass
 
 
 def cancel_job(jid):

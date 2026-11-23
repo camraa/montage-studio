@@ -392,3 +392,15 @@ pre { background: rgba(0,0,0,.35); border-radius: 6px; padding: 8px; font-family
 
 .warn-box { margin: 8px 0 10px; padding: 9px 11px; border-radius: 8px; font-size: 12px; line-height: 1.45;
   background: rgba(255,159,10,.12); border: 1px solid rgba(255,159,10,.35); }
+
+/* ---------- version / mises à jour ---------- */
+.ver-chip { font: 11px var(--font); color: var(--muted); background: transparent; border: 1px solid var(--hair);
+  border-radius: 999px; padding: 2px 9px; cursor: default; white-space: nowrap; }
+.ver-chip:hover { color: var(--text); border-color: var(--hair2); }
+.ver-chip.warn { color: #ffb340; border-color: rgba(255,159,10,.45); background: rgba(255,159,10,.1); }
+/* ---------- animations de la fenêtre ---------- */
+@keyframes app-in { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
+#app { animation: app-in .26s cubic-bezier(.2,.8,.2,1) both; }
+.native-drag { cursor: default; }
+.modal-box { animation: pop-in .16s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }

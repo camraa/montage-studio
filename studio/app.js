@@ -714,12 +714,19 @@ async function foldersModal() {
 
 let updManual = false;
 async function pollUpdate() {
-  let u;
-  try { u = await api("/api/update"); } catch (e) { return; }
-  const b = $("#upd-badge");
+  let u;      // fetch direct : api() lèverait une exception sur le champ « error » et le masquerait
+  try { u = await (await fetch("/api/update")).json(); } catch (e) { return; }
+  const b = $("#upd-badge"), v = $("#ver-chip");
   if (u.ready) { b.textContent = `⟳ Mise à jour ${u.ready} prête — Redémarrer`; b.classList.remove("hidden"); }
   else if (u.checking && u.progress) { b.textContent = `Téléchargement mise à jour… ${u.progress}%`; b.classList.remove("hidden"); }
   else b.classList.add("hidden");
+  if (v) {
+    const err = u.error && !u.ready, busy = u.checking && !u.progress;
+    v.textContent = `v${u.version}` + (busy ? " · recherche…" : err ? " · ⚠" : u.available && !u.ready ? ` · ${u.available}…` : "");
+    v.className = "ver-chip" + (err ? " warn" : "");
+    v.title = err ? u.error : u.ready ? `Version ${u.ready} prête` : busy ? "Recherche de mises à jour…"
+      : !u.configured ? "Mises à jour non configurées dans ce build" : `Montage Studio ${u.version} — à jour (clique pour vérifier)`;
+  }
   if (updManual && !u.checking) {
     updManual = false;
     modal(`<h3>Mises à jour</h3><div class="kv"><span>Version installée</span><b>${u.version}</b></div>
@@ -1087,19 +1094,34 @@ CMDS["bn-assets"] = () => modal(`<h3>Tes icônes de rangs et de cups</h3>
 
 /* ================= fenêtre façon macOS ================= */
 const winApi = () => (window.pywebview && window.pywebview.api && window.pywebview.api.win_close) ? window.pywebview.api : null;
+let NATIVE_DRAG = false;
 async function syncWindowChrome() {
   const w = winApi();
-  let frameless = false;
-  if (w && w.win_info) { try { frameless = !!(await w.win_info()).frameless; } catch (e) { frameless = false; } }
+  let frameless = false, info = {};
+  if (w && w.win_info) { try { info = await w.win_info(); frameless = !!info.frameless; } catch (e) { frameless = false; } }
+  NATIVE_DRAG = !!info.native_drag;
+  // gestes Windows : le déplacement passe par Windows (aimantation aux bords), pas par pywebview
+  $$(".pywebview-drag-region, .native-drag").forEach(el => {
+    el.classList.toggle("pywebview-drag-region", !NATIVE_DRAG); el.classList.toggle("native-drag", NATIVE_DRAG); });
+  document.body.classList.toggle("win-max", !!info.maximized);
   document.body.classList.toggle("native", frameless);
   const on = !(S.settings && S.settings.ui && S.settings.ui.mac_window === false);
   $("#mac-window-item").classList.toggle("checked", on);
 }
 window.addEventListener("pywebviewready", syncWindowChrome);
+window.syncWindowChrome = syncWindowChrome;
+window.onWinState = max => document.body.classList.toggle("win-max", !!max);
+$("#titlebar").addEventListener("mousedown", e => {
+  if (!NATIVE_DRAG || e.button !== 0) return;
+  if (e.target.closest("button, .menu, input, select, a, .titlebar-right, .traffic")) return;
+  e.preventDefault();
+  const w = winApi(); if (w && w.win_drag) w.win_drag();
+});
 $$(".traffic button").forEach(b => b.addEventListener("click", e => {
   e.stopPropagation(); const w = winApi(); if (w) w["win_" + b.dataset.win]();
 }));
 $("#titlebar").addEventListener("dblclick", e => {
+  if (NATIVE_DRAG) return;                 // géré par Windows (double-clic natif)
   if (e.target.closest("button, .menu, input, select, .titlebar-right")) return;
   const w = winApi(); if (w) w.win_max();
 });

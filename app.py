@@ -40,6 +40,14 @@ def migrate_old_install():
 
 
 def run_gui():
+    try:
+        import shell                      # fenêtre (module mis à jour automatiquement)
+    except Exception:
+        return run_gui_legacy()
+    return shell.run_gui()
+
+
+def run_gui_legacy():
     import studio
     from common import APP_NAME, APP_VERSION, DATA_DIR
     migrate_old_install()
