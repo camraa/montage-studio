@@ -378,3 +378,17 @@ pre { background: rgba(0,0,0,.35); border-radius: 6px; padding: 8px; font-family
 .pg-table td { padding: 6px 8px; border-bottom: 1px solid var(--hair); font-variant-numeric: tabular-nums; }
 .pg-table td.rec { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .pg-table .up { color: var(--green); } .pg-table .down { color: var(--red); }
+
+/* ---------- mode direct ---------- */
+.live-card { background: var(--raised); border: 1px solid var(--hair); border-radius: 10px; padding: 12px 14px;
+  display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; align-items: center; }
+.live-card h4 { margin: 0; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.live-dot.on { background: #ff453a; box-shadow: 0 0 0 4px rgba(255,69,58,.18); }
+.live-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.live-rank { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.live-url { font: 11px ui-monospace, monospace; color: var(--muted); user-select: text; }
+.live-card .full { grid-column: 1 / -1; }
+
+.warn-box { margin: 8px 0 10px; padding: 9px 11px; border-radius: 8px; font-size: 12px; line-height: 1.45;
+  background: rgba(255,159,10,.12); border: 1px solid rgba(255,159,10,.35); }

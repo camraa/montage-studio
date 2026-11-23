@@ -325,7 +325,12 @@ function renderProps() {
   const sel = S.sel;
   if (!sel || (sel.type !== "game" && sel.type !== "seg" && sel.type !== "final")) {
     const fin = S.plan.final;
+    const src = S.proj.source;
     el.innerHTML = `<div class="insp"><h3>Projet <span class="muted">${MODES[S.plan.mode]}</span></h3>
+      ${src ? `<div class="kv"><span>Rec</span><b>${src.width}×${src.height} • ${src.fps} img/s</b></div>` : ""}
+      ${src && src.height < 1080 ? `<div class="warn-box"><b>Rec en ${src.height}p</b> : le montage sera flou, même en 4K.
+        Dans OBS : Paramètres → Vidéo → <b>Résolution de sortie (mise à l'échelle)</b> = la même que la résolution de base
+        (1920×1080 ou plus), puis refais tes recs.</div>` : ""}
       <div class="kv"><span>Games</span><b>${S.plan.games.length}</b></div>
       <div class="kv"><span>Kills détectés</span><b>${(S.proj.timeline.games || []).reduce((a, g) => a + g.kills.length, 0)}</b></div>
       <div class="kv"><span>Montage modifié à la main</span><b>${S.plan.user_edited ? "oui" : "non"}</b></div>
@@ -846,12 +851,16 @@ async function loadProgress() {
   $("#pg-empty").textContent = modes.length ? "" : "Aucune session pour l'instant : chaque rec analysé s'ajoute ici automatiquement.";
   $(".pg-head .btn").classList.toggle("hidden", !modes.length);
   renderProgress();
+  renderLive();
+  clearInterval(LV.timer);
+  LV.timer = setInterval(() => { if ($("#view-progress").classList.contains("active") && !document.querySelector("#live-card :focus")) renderLive(); }, 3000);
 }
 
 function renderProgress() {
   const ss = (PG.data.sessions || []).filter(s => s.mode === PG.mode);
   const sm = PG.data.modes[PG.mode] || {};
   const kind = ss.length ? ss[0].kind : null;
+  $(".pg-chart").classList.toggle("hidden", !ss.length);
   if (!ss.length) { ["#pg-tiles", "#pg-chart", "#pg-table", "#pg-ctitle"].forEach(q => $(q).innerHTML = ""); return; }
   const tile = (l, v, sub = "") => `<div class="pg-tile"><span>${l}</span><b>${v}</b>${sub ? `<i>${sub}</i>` : ""}</div>`;
   let tiles = "";
@@ -920,6 +929,39 @@ function renderProgress() {
     ss.slice().reverse().map(s => `<tr><td>${fdate(s.date)}</td><td class="rec" title="${esc(s.rec)}">${esc(s.rec)}</td><td>${s.games}</td>
       <td>${s.kills}</td><td>${res(s)}</td><td><button class="btn ghost" data-pghide="${esc(s.id)}" title="Retirer de la progression (le rec n'est pas supprimé)">Retirer</button></td></tr>`).join("");
   $$("[data-pghide]").forEach(b => b.onclick = async () => { PG.data = await api("/api/progress/hide", { id: b.dataset.pghide }); loadProgress(); });
+}
+
+/* ---------- mode direct ---------- */
+const LV = { mode: null, timer: null };
+async function renderLive() {
+  const el = $("#live-card"); if (!el) return;
+  const st = await api("/api/live").catch(() => null); if (!st) return;
+  const ranked = Object.entries(PG.data && PG.data.labels || {}).filter(([m]) => ["ranked_br", "ranked_reload", "box_arena"].includes(m));
+  LV.mode = st.mode || LV.mode || (PG.mode && ranked.some(([m]) => m === PG.mode) ? PG.mode : "ranked_br");
+  const r = st.rank, url = location.origin + "/live/widget";
+  el.innerHTML = `<h4><span class="live-dot ${st.running ? "on" : ""}"></span>Mode direct
+      <span class="muted" style="font-weight:400">— ${esc(st.error ? "erreur : " + st.error : st.status)}</span></h4>
+    <div class="live-row">${st.running ? "" : `<select id="live-mode">${ranked.map(([m, l]) => `<option value="${m}" ${m === LV.mode ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`}
+      <button class="btn ${st.running ? "" : "primary"}" id="live-go">${st.running ? "Arrêter" : "Démarrer"}</button></div>
+    <div class="live-row full">${r ? `<span class="live-rank">${esc(rankTxt(r))}</span>
+      <span class="muted">départ ${esc(rankTxt(st.rank_start))}</span>
+      <span class="${(st.gain || 0) >= 0 ? "up" : "down"}" style="color:var(--${(st.gain || 0) >= 0 ? "green" : "red"})">${signed(st.gain)}</span>
+      <span class="muted">${st.games || 0} game${st.games > 1 ? "s" : ""}</span>`
+      : `<span class="muted">${st.running ? "Lance une partie classée : le rang est lu au salon après chaque game." :
+        "Lit ton rang à l'écran pendant que tu joues (au salon), sans compte Epic. Met à jour la Progression et le widget du live."}</span>`}</div>
+    <div class="live-row full"><span class="muted">Widget live :</span><span class="live-url">${url}</span>
+      <button class="btn ghost" id="live-copy">Copier</button>
+      <span class="muted">(source « Navigateur » / « Lien » dans OBS ou TikTok LIVE Studio, 400×120)</span></div>`;
+  $("#live-go").onclick = async () => {
+    if (st.running) await api("/api/live/stop", {});
+    else { const d = await api("/api/live/start", { mode: $("#live-mode").value }); if (d.error) status(d.error); }
+    renderLive();
+  };
+  const sel = $("#live-mode"); if (sel) sel.onchange = () => LV.mode = sel.value;
+  $("#live-copy").onclick = e => copyText(url, e.target);
+  if (st.running && st.rank && PG.data && (!LV.last || LV.last !== JSON.stringify(st.rank))) {
+    LV.last = JSON.stringify(st.rank); loadProgress();          // la session du jour vient de bouger
+  }
 }
 
 function progressBanner() {
