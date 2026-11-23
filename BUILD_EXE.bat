@@ -46,6 +46,8 @@ if not exist "build_assets\rembg_models\isnet-general-use.onnx" (
 echo [5/7] FFmpeg...
 if not exist "build_assets\ffmpeg" mkdir "build_assets\ffmpeg"
 set "FF="
+rem ffmpeg tout juste installe par winget : pas encore dans le PATH de cette fenetre
+for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*") do for /d %%B in ("%%D\ffmpeg-*") do if exist "%%B\bin\ffmpeg.exe" set "PATH=%%B\bin;!PATH!"
 for /f "delims=" %%F in ('where ffmpeg 2^>nul') do if not defined FF set "FF=%%F"
 if not defined FF ( echo [ERREUR] ffmpeg introuvable : ferme cette fenetre et relance BUILD_EXE.bat & pause & exit /b )
 for %%D in ("!FF!") do set "FFDIR=%%~dpD"

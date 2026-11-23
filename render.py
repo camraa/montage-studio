@@ -17,10 +17,47 @@ from PIL import Image, ImageDraw, ImageFont
 
 from common import ffprobe_info, fmt_tc, need, resolve, video_path, work_dir
 
+_NOWIN = {"creationflags": 0x08000000} if sys.platform == "win32" else {}   # pas de console ffmpeg
+
 DRY = False
 
 
-def run(cmd, duration=None, label="", progress=None):
+def _proc_mem(pid):
+    """Mémoire privée d'un processus (octets), Windows ou Linux ; None si illisible."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
+
+            class PMC(ctypes.Structure):
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + \
+                           [(n, ctypes.c_size_t) for n in (
+                               "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                               "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
+                               "PagefileUsage", "PeakPagefileUsage", "PrivateUsage")]
+            k32 = ctypes.windll.kernel32
+            h = k32.OpenProcess(0x1000, False, pid)
+            if not h:
+                return None
+            try:
+                c = PMC()
+                c.cb = ctypes.sizeof(PMC)
+                ok = ctypes.windll.psapi.GetProcessMemoryInfo(h, ctypes.byref(c), c.cb)
+                return max(c.PrivateUsage, c.WorkingSetSize) if ok else None
+            finally:
+                k32.CloseHandle(h)
+        with open(f"/proc/{pid}/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+    except Exception:
+        return None
+
+
+MEM_CAP_GB = 4.0     # un ffmpeg qui dépasse ça est arrêté (et on passe à une méthode plus légère)
+
+
+def run(cmd, duration=None, label="", progress=None, mem_cap_gb=None):
     """Lance ffmpeg ; si duration est donnée, affiche une barre de progression
     (ou appelle progress(secondes_faites) quand plusieurs encodages tournent en parallèle)."""
     if DRY:
@@ -30,10 +67,22 @@ def run(cmd, duration=None, label="", progress=None):
     if duration:
         cmd = cmd[:1] + ["-progress", "pipe:1", "-nostats"] + cmd[1:]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                         encoding="utf-8", errors="replace")
+                         encoding="utf-8", errors="replace", **_NOWIN)
     err = []
     import threading
     threading.Thread(target=lambda: err.extend(p.stderr.readlines()), daemon=True).start()
+    mem = {"peak": 0, "killed": False}
+
+    def watch():
+        while p.poll() is None:
+            m = _proc_mem(p.pid) or 0
+            mem["peak"] = max(mem["peak"], m)
+            if mem_cap_gb and m > mem_cap_gb * 1e9:
+                mem["killed"] = True
+                p.kill()
+                return
+            time.sleep(1.0)
+    threading.Thread(target=watch, daemon=True).start()
     t0 = time.time()
     for line in p.stdout:
         if duration and line.startswith("out_time_us="):
@@ -53,9 +102,12 @@ def run(cmd, duration=None, label="", progress=None):
     p.wait()
     if duration and not progress:
         print()
+    if mem["killed"]:
+        sys.exit(f"[MÉMOIRE] {label} : ffmpeg a dépassé {mem_cap_gb:.0f} Go -> arrêté")
     if p.returncode:
         print("".join(err)[-3000:])
         sys.exit(f"[ERREUR] ffmpeg a échoué (code {p.returncode})")
+    return mem["peak"] / 1e9
 
 
 def video_args(rc, kind):
@@ -389,20 +441,52 @@ def counter_stream(rc, counter, seg, folder):
         lines += [f"file '{p.as_posix()}'", f"duration {dur:.3f}"]
     lines.append(f"file '{entries[-1][0].as_posix()}'")
     lst.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return lst
+    # Petite vidéo du bandeau à cadence fixe (10 img/s, alpha, quelques Mo) : avec la liste d'images
+    # brute, ffmpeg gardait en mémoire toutes les images 4K entre deux kills (~10 Go par encodage).
+    mov = folder / "counter.mov"
+    subprocess.run([need("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y",
+                    "-f", "concat", "-safe", "0", "-i", str(lst),
+                    "-vf", "fps=10,format=argb", "-t", f"{e - s:.3f}", "-c:v", "qtrle", str(mov)],
+                   check=True, **_NOWIN)
+    return mov
 
 
 def render_segment(rc, video, info, seg, out, kind, progress=None, counter=None):
+    lst = None
     if counter and rc.get("live_counter", True):
-        lst = counter_stream(rc, counter, seg, out.parent / f"{out.stem}_counter")
+        try:
+            lst = counter_stream(rc, counter, seg, out.parent / f"{out.stem}_counter")
+        except Exception as ex:
+            print(f"\n[COMPTEUR] préparation impossible ({ex}) -> morceau sans compteur", flush=True)
+    if lst:
         modes = ["cuda", "download"] if kind == "nvenc" else ["cpu"]
         for m in modes:
+            if m in _BAD_MODES:
+                continue
             try:
-                return _render_segment(rc, video, info, seg, out, kind, progress, lst, m)
-            except SystemExit:
-                print(f"\n[COMPTEUR] méthode « {m} » refusée par ffmpeg, essai suivant…", flush=True)
-        print("[COMPTEUR] incrustation impossible sur ce PC -> morceau rendu sans compteur", flush=True)
-    return _render_segment(rc, video, info, seg, out, kind, progress)
+                _log_mode(m, _render_segment(rc, video, info, seg, out, kind, progress, lst, m))
+                return
+            except SystemExit as ex:
+                _BAD_MODES.add(m)          # inutile de la retenter sur les morceaux suivants
+                print(f"\n[COMPTEUR] méthode « {m} » abandonnée ({ex}) -> essai suivant", flush=True)
+        print("\n[COMPTEUR] incrustation impossible sur ce PC -> morceaux rendus sans compteur", flush=True)
+    _log_mode("nocounter", _render_segment(rc, video, info, seg, out, kind, progress))
+
+
+_BAD_MODES = set()
+_LOGGED = set()
+_MODE_TXT = {"cuda": "tout sur la carte graphique (décodage, compteur, encodage)",
+             "download": "compteur incrusté par le processeur, décodage + encodage sur la carte graphique",
+             "cpu": "rendu processeur", "nocounter": "sans compteur, tout sur la carte graphique"}
+
+
+def _log_mode(m, peak):
+    peak = peak or 0
+    if m not in _LOGGED:
+        _LOGGED.add(m)
+        print(f"\n[GPU] méthode : {_MODE_TXT.get(m, m)}  (mémoire ffmpeg max {peak:.1f} Go)", flush=True)
+    elif peak > 2.5:
+        print(f"\n[MÉMOIRE] un encodage a pris {peak:.1f} Go", flush=True)
 
 
 def _render_segment(rc, video, info, seg, out, kind, progress=None, counter_list=None, how=None):
@@ -420,25 +504,25 @@ def _render_segment(rc, video, info, seg, out, kind, progress=None, counter_list
     vmap = ["-vf", vf, "-map", "0:v:0"]
     if counter_list:
         ci = 1 if info["has_audio"] else 2
-        cmd += ["-f", "concat", "-safe", "0", "-i", counter_list]
+        cmd += ["-i", counter_list]
         fps = rc["fps"]
         if how == "cuda":            # tout reste sur la carte graphique
             main = ("[0:v]" + f"scale_cuda={rc['width']}:{rc['height']}:interp_algo=lanczos:format=yuv420p," +
                     f"fps={fps}[m]")
-            fc = (f"{main};[{ci}:v]fps={fps},format=yuva420p,hwupload_cuda[o];"
+            fc = (f"{main};[{ci}:v]format=yuva420p,hwupload_cuda[o];"
                   "[m][o]overlay_cuda=x=0:y=0:eof_action=pass[v]")
         elif how == "download":      # mise à l'échelle sur la carte, incrustation sur le processeur
             sc = "" if (info["width"], info["height"]) == (rc["width"], rc["height"]) else \
                 f"scale_cuda={rc['width']}:{rc['height']}:interp_algo=lanczos,"
-            fc = (f"[0:v]{sc}fps={fps},hwdownload,format=nv12[m];[{ci}:v]fps={fps},format=rgba[o];"
+            fc = (f"[0:v]{sc}fps={fps},hwdownload,format=nv12[m];[{ci}:v]format=rgba[o];"
                   "[m][o]overlay=0:0:eof_action=pass,format=nv12[v]")
         else:
-            fc = f"[0:v]{vf}[m];[{ci}:v]fps={fps},format=rgba[o];[m][o]overlay=0:0:eof_action=pass,format={pix_fmt(kind)}[v]"
+            fc = f"[0:v]{vf}[m];[{ci}:v]format=rgba[o];[m][o]overlay=0:0:eof_action=pass,format={pix_fmt(kind)}[v]"
         vmap = ["-filter_complex", fc, "-map", "[v]"]
     cmd += ["-t", f"{d:.3f}", *vmap,
             "-map", f"0:a:{rc['audio_stream']}" if info["has_audio"] else "1:a",
             *video_args(rc, kind), *AUDIO, out]
-    run(cmd, duration=d, label=out.stem, progress=progress)
+    return run(cmd, duration=d, label=out.stem, progress=progress, mem_cap_gb=MEM_CAP_GB if counter_list else None)
 
 
 MUSIC_EXT = (".mp3", ".wav", ".ogg", ".m4a", ".flac")
@@ -757,4 +841,7 @@ def render(cfg, cpu=False, reencode_final=False):
     print(f"[OUTPUT] {out}")
     for old in list(clips_dir.glob("*.mp4")) + list(clips_dir.glob("*.wav")):
         old.unlink()          # libère la place (les clips intermédiaires sont énormes)
+    import shutil
+    for d in clips_dir.glob("*_counter"):
+        shutil.rmtree(d, ignore_errors=True)
     return out
