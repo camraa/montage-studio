@@ -1,9 +1,11 @@
 """Publie une mise à jour de Montage Studio sur GitHub Releases (lancé par PUBLIER_MAJ.bat).
 
+  python publish.py                      version suivante automatique, notes = dernier commit
   python publish.py 1.0.1 "Correction du scan Battle Royale"
   python publish.py 1.0.1 --notes-file notes.txt [--min-base 1.0.0] [--no-upload]
+  python publish.py --version-build      écrit _version.py pour BUILD_EXE (= dernière version publiée)
 
-1. met la version dans common.py
+1. écrit la version dans _version.py (pas dans git : rien à committer après une publication)
 2. compile le code (.pyc) + interface/polices/musiques -> update-<version>.zip (quelques Mo)
 3. crée latest.json (empreinte SHA-256) et envoie les deux fichiers dans une release GitHub (outil gh)
 
@@ -40,10 +42,44 @@ def repo_name():
 
 
 def set_version(v):
-    p = HERE / "common.py"
-    s = p.read_text(encoding="utf-8")
-    s2 = re.sub(r'^APP_VERSION = "[^"]*"', f'APP_VERSION = "{v}"', s, count=1, flags=re.M)
-    p.write_text(s2, encoding="utf-8")
+    (HERE / "_version.py").write_text(f'VERSION = "{v}"\n', encoding="utf-8")
+
+
+def _vt(v):
+    return tuple(int(x) for x in v.split("."))
+
+
+def local_version():
+    m = re.search(r'"(\d+\.\d+\.\d+)"', (HERE / "_version.py").read_text(encoding="utf-8")) \
+        if (HERE / "_version.py").exists() else None
+    return m.group(1) if m else BASE_VERSION
+
+
+def published_version(repo):
+    """Plus haute version publiée sur GitHub (tags vX.Y.Z) ; None si inconnue."""
+    exe = shutil.which("gh")
+    if not exe:
+        return None
+    r = subprocess.run([exe, "release", "list", "--repo", repo, "--limit", "100", "--json", "tagName"],
+                       capture_output=True, text=True)
+    if r.returncode:
+        return None
+    tags = [t["tagName"][1:] for t in json.loads(r.stdout or "[]") if re.fullmatch(r"v\d+\.\d+\.\d+", t["tagName"])]
+    return max(tags, key=_vt) if tags else None
+
+
+def next_version(repo):
+    best = max([v for v in (local_version(), published_version(repo)) if v], key=_vt)
+    a, b, c = _vt(best)
+    return f"{a}.{b}.{c + 1}"
+
+
+def last_commit_subject():
+    try:
+        r = subprocess.run(["git", "-C", str(HERE), "log", "-1", "--pretty=%s"], capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except OSError:
+        return ""
 
 
 def build_package(version, out_dir):
@@ -120,18 +156,23 @@ def publish_installer():
 def main():
     if "--installateur" in sys.argv:
         return publish_installer()
+    if "--version-build" in sys.argv:          # BUILD_EXE : l'exe prend la dernière version publiée
+        v = max([x for x in (local_version(), published_version(repo_name())) if x], key=_vt)
+        set_version(v)
+        return print(f"     version de l'app : {v}")
     ap = argparse.ArgumentParser()
-    ap.add_argument("version")
+    ap.add_argument("version", nargs="?", default="auto")
     ap.add_argument("notes", nargs="?", default="")
     ap.add_argument("--notes-file")
     ap.add_argument("--min-base", default=BASE_VERSION)
     ap.add_argument("--no-upload", action="store_true")
     a = ap.parse_args()
-    v = a.version.lstrip("v")
+    repo = repo_name()
+    v = next_version(repo) if a.version in ("auto", "") else a.version.lstrip("v")
     if not re.fullmatch(r"\d+\.\d+\.\d+", v):
         sys.exit("[ERREUR] version au format X.Y.Z (ex : 1.0.1)")
-    notes = Path(a.notes_file).read_text(encoding="utf-8") if a.notes_file else a.notes
-    repo = repo_name()
+    notes = Path(a.notes_file).read_text(encoding="utf-8") if a.notes_file else (a.notes or last_commit_subject())
+    print(f"[MAJ] version {v} : {notes or '(sans notes)'}")
 
     set_version(v)
     out = HERE / "dist" / "maj" / f"v{v}"

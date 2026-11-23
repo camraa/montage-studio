@@ -31,7 +31,7 @@ for pkg in ("easyocr", "webview", "pythonnet", "clr_loader", "faster_whisper", "
     datas += d
     binaries += b
     hidden += h
-hidden += ["scan", "edit", "render", "thumbs", "job", "run", "banners", "shorts", "transcribe", "youtube", "voice", "progress", "studio", "common",
+hidden += ["scan", "edit", "render", "thumbs", "job", "run", "banners", "shorts", "transcribe", "youtube", "voice", "progress", "_version", "studio", "common",
            "updater", "update_cfg", "zipimport", "py_compile", "urllib.request", "ssl",
            "clr_loader", "pythonnet"]
 hidden += collect_submodules("webview.platforms")

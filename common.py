@@ -8,7 +8,10 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Montage Studio"
-APP_VERSION = "1.0.0"
+try:                                   # écrit par BUILD_EXE / PUBLIER_MAJ (jamais à la main, pas dans git)
+    from _version import VERSION as APP_VERSION
+except ImportError:
+    APP_VERSION = "1.0.0"
 FROZEN = getattr(sys, "frozen", False)
 # fichiers livrés avec l'installation (lecture seule) : modèles OCR, FFmpeg, moteur PyTorch...
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))

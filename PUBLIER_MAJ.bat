@@ -26,11 +26,9 @@ if errorlevel 1 (
   gh auth login --web --git-protocol https
 )
 
-"%VPY%" -c "import common;print('Version actuelle :', common.APP_VERSION)"
-set /p VER="Nouvelle version (ex 1.0.1) : "
-set /p NOTES="Ce qui change (une phrase) : "
-"%VPY%" publish.py %VER% "%NOTES%"
+rem version suivante automatique, notes = dernier changement recupere avec Pull origin
+"%VPY%" publish.py
 if errorlevel 1 ( echo [ERREUR] publication & pause & exit /b )
 echo.
-echo Pense a garder ce dossier a jour : la prochaine version partira de ce code.
+echo Ton app installee et celles de tes clients la proposent au prochain lancement ^(bouton Redemarrer^).
 pause
