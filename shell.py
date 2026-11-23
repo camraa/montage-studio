@@ -49,8 +49,6 @@ if IS_WIN:
     user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-    user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
-    user32.GetAsyncKeyState.restype = ctypes.c_short
 
 SWP_NOZORDER, SWP_NOACTIVATE, SWP_SHOWWINDOW = 0x4, 0x10, 0x40
 WM_NCLBUTTONDOWN, HTCAPTION = 0xA1, 2
@@ -110,7 +108,12 @@ def ease(t):
 
 
 class Native:
-    """Gestes Windows d'une fenêtre pywebview sans cadre (WinForms + WebView2)."""
+    """Gestes Windows d'une fenêtre pywebview sans cadre (WinForms + WebView2).
+
+    Règle d'or : le fil de la fenêtre n'est JAMAIS bloqué ni attendu. Le déplacement est piloté depuis
+    la page (pointeur capturé) et appliqué par SetWindowPos depuis un fil Python ; les objets WinForms
+    (aperçu, icône, transparence) ne sont touchés que via BeginInvoke (sans attente).
+    (v1.1.6 utilisait la boucle de déplacement de Windows : avec WebView2 elle pouvait ne jamais rendre la main.)"""
 
     def __init__(self, window):
         self.window = window
@@ -119,29 +122,25 @@ class Native:
         self.zone = None                 # aimantation en cours (None = position libre)
         self.normal = None               # [x, y, w, h] avant agrandissement / aimantation
         self.preview = None
-        self.ptimer = None
-        self.anim = None
-        self.last_click = 0.0
+        self.drag = None
+        self.lock = threading.Lock()
+        self.anim_id = 0
         self.tray = None
         self.ok = False
 
-    # -------- exécution sur le fil de la fenêtre (obligatoire pour WinForms)
-    def ui(self, fn, wait=True):
+    def later(self, fn):
+        """Exécute fn sur le fil de la fenêtre, sans jamais attendre."""
         from System import Action
-        box = {}
 
         def run():
             try:
-                box["r"] = fn()
+                fn()
             except Exception:
-                _log_error(getattr(fn, "__name__", "ui"))
-        if not self.form.InvokeRequired:
-            run()
-        elif wait:
-            self.form.Invoke(Action(run))
-        else:
+                _log_error(getattr(fn, "__name__", "later"))
+        try:
             self.form.BeginInvoke(Action(run))
-        return box.get("r")
+        except Exception:
+            _log_error("BeginInvoke")
 
     def attach(self):
         try:
@@ -151,29 +150,27 @@ class Native:
         except Exception:
             _log_error("attach")
 
-    # -------- déplacement natif + aimantation
-    def set_rect(self, r):
-        user32.SetWindowPos(self.hwnd, None, int(r[0]), int(r[1]), int(r[2]), int(r[3]), SWP_NOZORDER | SWP_NOACTIVATE)
+    # -------- position
+    def set_rect(self, r, size=True):
+        flags = SWP_NOZORDER | SWP_NOACTIVATE | (0 if size else 0x1)
+        user32.SetWindowPos(self.hwnd, None, int(r[0]), int(r[1]), int(r[2]), int(r[3]), flags)
 
     def animate(self, to, ms=170):
-        from System.Windows.Forms import Timer
-        if self.anim:
-            self.anim.Stop()
-        frm, t0 = win_rect(self.hwnd), time.perf_counter()
-        tm = Timer()
-        tm.Interval = 10
+        self.anim_id += 1
+        my = self.anim_id
 
-        def tick(*_):
-            k = min(1.0, (time.perf_counter() - t0) * 1000 / ms)
-            e = ease(k)
-            self.set_rect([frm[i] + (to[i] - frm[i]) * e for i in range(4)])
-            if k >= 1.0:
-                tm.Stop()
-                self.set_rect(to)
-        tm.Tick += tick
-        self.anim = tm
-        tm.Start()
+        def run():
+            frm, t0 = win_rect(self.hwnd), time.perf_counter()
+            while my == self.anim_id:
+                k = min(1.0, (time.perf_counter() - t0) * 1000 / ms)
+                e = ease(k)
+                self.set_rect([frm[i] + (to[i] - frm[i]) * e for i in range(4)])
+                if k >= 1.0:
+                    return
+                time.sleep(0.008)
+        threading.Thread(target=run, daemon=True).start()
 
+    # -------- aperçu d'aimantation (fenêtre bleue translucide sous la nôtre)
     def _preview_form(self):
         if self.preview:
             return self.preview
@@ -185,7 +182,6 @@ class Native:
         f.StartPosition = FormStartPosition.Manual
         f.BackColor = Color.FromArgb(10, 132, 255)
         f.Opacity = 0.22
-        f.Text = ""
         h = int(f.Handle.ToInt64())
         try:                         # coins arrondis Windows 11
             v = ctypes.c_int(2)
@@ -195,137 +191,131 @@ class Native:
         self.preview = f
         return f
 
-    def _show_preview(self, zone, work):
-        f = self._preview_form()
-        ph = int(f.Handle.ToInt64())
-        if not zone:
-            user32.ShowWindow(ph, 0)
-            return
-        r = zone_rect(zone, work)
-        pad = 6
-        user32.SetWindowPos(ph, self.hwnd, r[0] + pad, r[1] + pad, r[2] - 2 * pad, r[3] - 2 * pad,
-                            SWP_NOACTIVATE | SWP_SHOWWINDOW)
+    def show_preview(self, rect):
+        def go():
+            f = self._preview_form()
+            ph = int(f.Handle.ToInt64())
+            if not rect:
+                user32.ShowWindow(ph, 0)
+                return
+            pad = 6
+            user32.SetWindowPos(ph, self.hwnd, rect[0] + pad, rect[1] + pad, rect[2] - 2 * pad, rect[3] - 2 * pad,
+                                SWP_NOACTIVATE | SWP_SHOWWINDOW)
+        self.later(go)
 
-    def _drag_on_ui(self):
-        from System.Windows.Forms import Timer
-        x0, y0 = cursor()
-        now = time.time()
-        moved = False
-        while user32.GetAsyncKeyState(0x01) & 0x8000:      # clic ou début de glissement ?
-            x, y = cursor()
-            if abs(x - x0) > 5 or abs(y - y0) > 5:
-                moved = True
-                break
-            time.sleep(0.005)
-        if not moved:                                        # simple clic : double-clic = agrandir/restaurer
-            if now - self.last_click < 0.45:
-                self.last_click = 0.0
-                self.toggle_max()
-            else:
-                self.last_click = now
-            return
-        self.last_click = 0.0
-        rect = win_rect(self.hwnd)
-        was_zone = self.zone
-        if self.zone:                     # fenêtre agrandie / aimantée : on la « décroche » sous la souris
-            nw, nh = (self.normal or [0, 0, 1400, 860])[2:]
-            rel = (x0 - rect[0]) / max(1, rect[2])
-            x, y = cursor()
-            self.set_rect([int(x - nw * rel), max(rect[1], y - (y0 - rect[1])), nw, nh])
-            self.zone = None
-            self._notify_state()
-        tm = Timer()
-        tm.Interval = 30
-        last = {"z": None}
+    # -------- glisser (appelé par la page : début / mouvement / fin)
+    def drag_start(self):
+        x, y = cursor()
+        with self.lock:
+            self.anim_id += 1                    # stoppe une animation en cours
+            r = win_rect(self.hwnd)
+            self.drag = {"x0": x, "y0": y, "rect": r, "moved": False, "zone": None, "dx": x - r[0], "dy": y - r[1]}
 
-        def tick(*_):
-            x, y = cursor()
+    def drag_move(self):
+        d = self.drag
+        if not d:
+            return
+        x, y = cursor()
+        with self.lock:
+            if not d["moved"]:
+                if abs(x - d["x0"]) <= 5 and abs(y - d["y0"]) <= 5:
+                    return
+                d["moved"] = True
+                if self.zone:                    # agrandie / aimantée : on la décroche sous la souris
+                    r = d["rect"]
+                    nw, nh = (self.normal or [0, 0, 1400, 860])[2:]
+                    rel = (d["x0"] - r[0]) / max(1, r[2])
+                    d["dx"], d["dy"] = int(nw * rel), d["y0"] - r[1]
+                    d["was_zone"] = self.zone
+                    self.zone = None
+                    self.set_rect([x - d["dx"], y - d["dy"], nw, nh])
+                    self._notify_state()
+                    return
+            self.set_rect([x - d["dx"], y - d["dy"], 0, 0], size=False)
             mon, work = monitor_at(x, y)
             z = snap_zone(x, y, mon, work)
-            if z != last["z"]:
-                last["z"] = z
-                self._show_preview(z, work)
-        tm.Tick += tick
-        tm.Start()
-        user32.ReleaseCapture()
-        user32.SendMessageW(self.hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0)     # boucle de déplacement Windows
-        tm.Stop()
-        self._show_preview(None, None)
-        x1, y1 = cursor()
-        mon, work = monitor_at(x1, y1)
-        z = snap_zone(x1, y1, mon, work)
+            if z != d["zone"]:
+                d["zone"] = z
+                self.show_preview(zone_rect(z, work) if z else None)
+
+    def drag_end(self):
+        d, self.drag = self.drag, None
+        if not d:
+            return
+        if d["zone"]:
+            self.show_preview(None)
+        if not d["moved"]:
+            return
+        x, y = cursor()
+        mon, work = monitor_at(x, y)
+        z = snap_zone(x, y, mon, work)
         if z:
-            if not was_zone:
-                self.normal = rect
+            if not d.get("was_zone"):
+                self.normal = d["rect"]
             self.zone = z
             self.animate(zone_rect(z, work))
             self._notify_state()
 
-    def drag(self):
-        self.ui(self._drag_on_ui)
-
     def toggle_max(self):
-        def go():
-            r = win_rect(self.hwnd)
-            if self.zone:
-                self.zone = None
-                to = self.normal or [r[0] + 80, r[1] + 60, 1400, 860]
-                _, work = monitor_at(r[0] + r[2] // 2, r[1] + 10)
-                to = [max(work[0], min(to[0], work[0] + work[2] - to[2])),
-                      max(work[1], min(to[1], work[1] + work[3] - 40)), to[2], to[3]]
-                self.animate(to)
-            else:
-                self.normal = r
-                _, work = monitor_at(r[0] + r[2] // 2, r[1] + r[3] // 2)
-                self.zone = "max"
-                self.animate(zone_rect("max", work))
-            self._notify_state()
-        self.ui(go)
+        r = win_rect(self.hwnd)
+        if self.zone:
+            self.zone = None
+            to = self.normal or [r[0] + 80, r[1] + 60, 1400, 860]
+            _, work = monitor_at(r[0] + r[2] // 2, r[1] + 10)
+            to = [max(work[0], min(to[0], work[0] + work[2] - to[2])),
+                  max(work[1], min(to[1], work[1] + work[3] - 40)), to[2], to[3]]
+        else:
+            self.normal = r
+            _, work = monitor_at(r[0] + r[2] // 2, r[1] + r[3] // 2)
+            self.zone = "max"
+            to = zone_rect("max", work)
+        self.animate(to)
+        self._notify_state()
 
     def _notify_state(self):
+        z = bool(self.zone)
+        threading.Thread(target=lambda: self._js(f"window.onWinState && window.onWinState({str(z).lower()})"),
+                         daemon=True).start()
+
+    def _js(self, code):
         try:
-            self.window.evaluate_js(f"window.onWinState && window.onWinState({str(bool(self.zone)).lower()})")
+            self.window.evaluate_js(code)
         except Exception:
             pass
 
-    # -------- fondus
+    # -------- fondus (réglés pas à pas depuis un fil Python, appliqués sans attente)
     def fade(self, to, ms=160, then=None):
-        from System.Windows.Forms import Timer
-        frm, t0 = float(self.form.Opacity), time.perf_counter()
-        tm = Timer()
-        tm.Interval = 10
-
-        def tick(*_):
-            k = min(1.0, (time.perf_counter() - t0) * 1000 / ms)
+        def run():
             try:
-                self.form.Opacity = frm + (to - frm) * ease(k)
+                frm = float(self.form.Opacity)
             except Exception:
-                k = 1.0
-            if k >= 1.0:
-                tm.Stop()
-                if then:
-                    then()
-        tm.Tick += tick
-        tm.Start()
+                frm = 1.0
+            t0 = time.perf_counter()
+            while True:
+                k = min(1.0, (time.perf_counter() - t0) * 1000 / ms)
+                v = frm + (to - frm) * ease(k)
+                self.later(lambda v=v: setattr(self.form, "Opacity", v))
+                if k >= 1.0:
+                    break
+                time.sleep(0.012)
+            if then:
+                then()
+        threading.Thread(target=run, daemon=True).start()
 
     def minimize(self):
         from System.Windows.Forms import FormWindowState
 
         def done():
-            self.form.WindowState = FormWindowState.Minimized
-            self.form.Opacity = 1.0
-        self.ui(lambda: self.fade(0.0, 140, done), wait=False)
+            def go():
+                self.form.WindowState = FormWindowState.Minimized
+                self.form.Opacity = 1.0
+            self.later(go)
+        self.fade(0.0, 140, done)
 
     def close_animated(self, destroy):
-        done = threading.Event()
-
-        def finish():
-            done.set()
-        try:
-            self.ui(lambda: self.fade(0.0, 170, finish), wait=False)
-            done.wait(0.6)
-        except Exception:
-            _log_error("close_animated")
+        ev = threading.Event()
+        self.fade(0.0, 170, ev.set)
+        ev.wait(0.6)
         destroy()
 
     def show(self):
@@ -338,22 +328,24 @@ class Native:
             self.form.Opacity = 1.0
             self.form.Activate()
             user32.SetForegroundWindow(self.hwnd)
-        self.ui(go, wait=False)
+        self.later(go)
 
     # -------- zone de notification
     def make_tray(self, icon_path, on_check_update, on_quit):
         from System.Drawing import Icon
         from System.Windows.Forms import ContextMenuStrip, MouseButtons, NotifyIcon, ToolStripMenuItem, ToolStripSeparator
+        from common import APP_NAME, APP_VERSION
+        title = f"{APP_NAME} {APP_VERSION}"[:63]
+        exe = sys.executable
 
         def go():
             ni = NotifyIcon()
             try:
                 ni.Icon = Icon(str(icon_path)) if icon_path and os.path.exists(str(icon_path)) else \
-                    Icon.ExtractAssociatedIcon(sys.executable)
+                    Icon.ExtractAssociatedIcon(exe)
             except Exception:
-                ni.Icon = Icon.ExtractAssociatedIcon(sys.executable)
-            from common import APP_NAME, APP_VERSION
-            ni.Text = f"{APP_NAME} {APP_VERSION}"[:63]
+                ni.Icon = Icon.ExtractAssociatedIcon(exe)
+            ni.Text = title
             menu = ContextMenuStrip()
             for label, fn in (("Ouvrir Montage Studio", self.show), ("Rechercher des mises à jour", on_check_update)):
                 it = ToolStripMenuItem(label)
@@ -371,21 +363,21 @@ class Native:
             ni.MouseClick += click
             ni.Visible = True
             self.tray = ni
-        self.ui(go)
+        self.later(go)
 
     def balloon(self, title, text):
         if not self.tray:
             return
         from System.Windows.Forms import ToolTipIcon
-        self.ui(lambda: self.tray.ShowBalloonTip(5000, title, text, ToolTipIcon.Info), wait=False)
+        self.later(lambda: self.tray.ShowBalloonTip(5000, title, text, ToolTipIcon.Info))
 
     def remove_tray(self):
-        if self.tray:
+        t, self.tray = self.tray, None
+        if t:
             def go():
-                self.tray.Visible = False
-                self.tray.Dispose()
-            self.ui(go)
-            self.tray = None
+                t.Visible = False
+                t.Dispose()
+            self.later(go)
 
 
 # ------------------------------------------------------------------ fenêtre
@@ -466,12 +458,23 @@ def run_gui():
 
     class Api:
         def win_info(self):
-            return {"frameless": frameless, "native_drag": bool(native()), "maximized": bool(native() and native().zone)}
+            n = native()
+            return {"frameless": frameless, "native_drag": bool(n and frameless), "maximized": bool(n and n.zone)}
 
-        def win_drag(self):
+        def win_drag_start(self):
             n = native()
             if n:
-                n.drag()
+                n.drag_start()
+
+        def win_drag_move(self):
+            n = native()
+            if n:
+                n.drag_move()
+
+        def win_drag_end(self):
+            n = native()
+            if n:
+                n.drag_end()
 
         def win_close(self):
             quit_app()
@@ -527,15 +530,18 @@ def run_gui():
     def on_shown():
         if not IS_WIN:
             return
-        try:
-            n = Native(window)
-            n.attach()
-            if n.ok:
-                nat["n"] = n
-                n.make_tray(icon, check_update, quit_app)
-                window.evaluate_js("window.syncWindowChrome && window.syncWindowChrome()")
-        except Exception:
-            _log_error("on_shown")
+
+        def setup():                 # hors du fil de la fenêtre, et sans jamais l'attendre
+            try:
+                time.sleep(0.3)
+                n = Native(window)
+                n.attach()
+                if n.ok:
+                    nat["n"] = n
+                    n.make_tray(icon, check_update, quit_app)
+            except Exception:
+                _log_error("on_shown")
+        threading.Thread(target=setup, daemon=True).start()
 
     def on_job_end(j):
         n = native()
