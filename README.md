@@ -41,6 +41,10 @@ GitHub Desktop → Clone → `camraa/montage-studio`, puis **STUDIO.bat** (insta
   1080x1920 avec gros titre auto et **sous-titres de ta voix** mot par mot → `Vidéos\Shorts`.
   Tes **réactions au son** (voix qui monte d'un coup) comptent aussi : bonus pour un fight où tu réagis,
   et une grosse réaction sans kill peut devenir un Short. Piste du micro réglable (onglet Rendu → Shorts).
+- **Fenêtre** : glisser la barre de titre contre le haut de l'écran = plein écran, contre un côté = moitié,
+  dans un coin = quart (aperçu bleu comme Windows) ; tirer vers le bas pour restaurer ; double-clic = agrandir.
+  Icône dans la zone de notification (ouvrir, mises à jour, quitter) + notification à la fin d'une analyse / d'un rendu.
+  Version et état des mises à jour toujours visibles en haut à droite (⚠ = problème, détail au survol).
 - **Reprise après plantage** : si l'app ou le PC s'arrête pendant une analyse ou un rendu, la tâche apparaît
   « interrompue » dans la File avec **Reprendre là où ça s'est arrêté** : l'analyse repart de la dernière image lue,
   le rendu garde les morceaux déjà finis. Le montage final s'écrit sous « (en cours) » et n'est renommé qu'une
