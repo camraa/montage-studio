@@ -245,7 +245,7 @@ def parse_rank(results, W):
         words = re.findall(r"[a-z]+|\d+|\|", txt)
         for j, wd in enumerate(words):
             for ti, (_, keys) in enumerate(TIERS):
-                if wd in keys:
+                if wd in keys and len(txt) <= 16:
                     nxt = words[j + 1] if j + 1 < len(words) else None
                     if nxt is None and i + 1 < len(boxes) and abs(boxes[i + 1][1] - cy) < 30 \
                             and 0 < boxes[i + 1][0] - cx < 300:
@@ -472,14 +472,93 @@ def score(st):
     return st["level"] * 100 + st["pct"]
 
 
+MAX_GAME_GAIN = 250        # au-delà (en %) d'une game à l'autre : lecture fausse, jamais affichée
+
+
+def lobby_only_ranks(samples, min_lobby_s):
+    """Un rang n'est valable que dans un vrai salon : >= min_lobby_s sans HUD de partie autour.
+    (carte ouverte, mort, réapparition Reload, 'lingots d'or'... ne doivent plus couper une game)"""
+    import bisect
+    hud = [s["t"] for s in samples if s.get("players") is not None]
+    dropped = 0
+    for s in samples:
+        if not s.get("rank"):
+            continue
+        i = bisect.bisect_left(hud, s["t"])
+        prev = hud[i - 1] if i > 0 else float("-inf")
+        nxt = hud[i] if i < len(hud) else float("inf")
+        if nxt - prev < min_lobby_s:
+            del s["rank"]
+            dropped += 1
+    return dropped
+
+
+def _rscore(r):
+    lvl, pct = r
+    return lvl * 100 + (pct if pct is not None else 50)
+
+
+def coherent_ranks(samples):
+    """Le rang bouge peu pendant une session : on écarte les lectures qui sautent de plusieurs
+    divisions d'un coup, sauf si 3 lectures d'affilée confirment le nouveau rang."""
+    reads = [s for s in samples if s.get("rank")]
+    if not reads:
+        return 0
+    allv = sorted(_rscore(s["rank"]) for s in reads)
+    cur = allv[len(allv) // 2]               # point de départ : médiane de la session
+    pending, dropped = [], 0
+    for s in reads:
+        v = _rscore(s["rank"])
+        if abs(v - cur) <= MAX_GAME_GAIN:
+            cur = v
+            for q in pending:
+                del q["rank"]
+                dropped += 1
+            pending = []
+            continue
+        pending.append(s)
+        vals = [_rscore(q["rank"]) for q in pending[-3:]]
+        if len(pending) >= 3 and max(vals) - min(vals) <= 150:
+            cur = vals[-1]                   # vrai changement (ou médiane de départ fausse)
+            pending = []
+    for q in pending:
+        del q["rank"]
+        dropped += 1
+    return dropped
+
+
+def merge_false_splits(clusters, samples, markers, sc):
+    """Deux morceaux séparés de quelques secondes sans salon entre eux = la même game."""
+    out = []
+    for c in clusters:
+        if out:
+            pend = out[-1][-1][0]
+            if c[0][0] - pend < sc.get("merge_gap_s", 45) and not any(pend < x < c[0][0] for x in markers):
+                out[-1] = out[-1] + c
+                continue
+        out.append(c)
+    return out
+
+
+def is_real_game(c, kills):
+    """Île d'attente / écran sans vraie partie : les joueurs restants ne baissent quasi pas, 0 kill."""
+    ps = [p for _, p in c]
+    return kills or max(ps) - min(ps) >= 5 or c[-1][0] - c[0][0] >= 240
+
+
 def analyze(samples, cfg, duration):
     sc = cfg["scan"]
+    if cfg.get("mode_rank", cfg["mode"].startswith("ranked")):
+        a = lobby_only_ranks(samples, sc.get("min_lobby_s", 20))
+        b = coherent_ranks(samples)
+        if a or b:
+            print(f"[SCAN] rangs ignorés : {a} lus pendant une game, {b} incohérents")
     if cfg.get("mode_kind") == "box":
         return analyze_box(samples, cfg), None
     cup = cfg["mode"] == "cup"
     lobbies = lobby_markers(samples) if cup else []
     markers = [l[0] for l in lobbies] if cup else [s["t"] for s in samples if s.get("rank")]
-    clusters = find_games(samples, sc, markers)
+    clusters = merge_false_splits(find_games(samples, sc, markers), samples, markers, sc)
 
     games, prev_end, last_partie, last_pts = [], 0.0, 0, 0
     bounds = [c[0][0] for c in clusters] + [float("inf")]
@@ -487,6 +566,9 @@ def analyze(samples, cfg, duration):
         start, end = c[0][0], c[-1][0]
         in_game = [s for s in samples if start <= s["t"] <= end]
         kills, tops, spec = game_events(c, in_game, cfg)
+        if not is_real_game(c, kills):
+            print(f"  morceau {fmt_tc(start)[:8]} -> {fmt_tc(end)[:8]} ignoré (pas une vraie game)")
+            continue
         g = {"start": start, "end": end, "kills": kills, "tops": tops, "final_spectate": spec}
         if cup:
             before = [l for l in lobbies if prev_end <= l[0] < start and l[1] > last_partie]
@@ -530,8 +612,10 @@ def write_timeline(cfg, games, final_pts, duration):
             e.update(cup_games=g["cup_total"], points_before=g["lobby_points"])
         else:
             rb, ra = g.get("rank_before"), g.get("rank_after")
-            e.update(rank_before=rb, rank_after=ra,
-                     gain=(score(ra) - score(rb)) if score(ra) is not None and score(rb) is not None else None)
+            gain = (score(ra) - score(rb)) if score(ra) is not None and score(rb) is not None else None
+            if gain is not None and abs(gain) > MAX_GAME_GAIN:
+                gain = None
+            e.update(rank_before=rb, rank_after=ra, gain=gain)
         out["games"].append(e)
     gs = out["games"]
     if cup:

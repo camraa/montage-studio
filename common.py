@@ -60,6 +60,8 @@ DEFAULT_CONFIG = {
         "rank_lobby_every": 2,        # ranked : OCR plein écran 1 image de salon sur N
         "hud_row_threshold": 170,
         "hud_bin_threshold": 190,
+        "min_lobby_s": 20,            # ranked : un rang ne compte que s'il est lu dans un vrai salon (>= 20 s sans HUD)
+        "merge_gap_s": 45,            # deux morceaux à moins de 45 s sans salon entre eux = même game
         "split_gap_s": 240,           # aucune lecture HUD pendant X s (sans salon lu) => nouvelle game
         "new_game_jump": 30,          # joueurs restants qui remontent de +30 (confirmé) => nouvelle game
         "min_game_s": 45,
@@ -77,9 +79,11 @@ DEFAULT_CONFIG = {
     "edit": {
         "bus_skip_s": 30,             # coupe le bus au début de chaque game (HUD visible dès le bus)
         "end_tail_s": 6,
-        "dead_gap_s": 300,            # > 5 min sans kill ni points de top => on coupe le creux
-        "dead_keep_after_s": 20,      # ...en gardant 20 s après le dernier événement
-        "dead_keep_before_s": 60,     # ...et 60 s avant le suivant (approche du fight)
+        "dead_gap_s": 420,            # > 7 min sans kill ni palier de top => on coupe le creux (0 = jamais)
+        "dead_keep_after_s": 30,      # ...en gardant 30 s après le dernier événement
+        "dead_keep_before_s": 90,     # ...et 90 s avant le suivant (approche du fight)
+        "dead_protect_end_s": 240,    # jamais de coupe dans les 4 dernières minutes d'une game
+        "dead_min_cut_s": 90,         # une coupe de moins de 90 s ne vaut pas la cassure
         # paliers de top (si l'encart 'ATTEINDRE LE TOP X' n'est pas lu) : joueurs restants franchis
         "top_players_fractions": [0.5, 0.3, 0.2, 0.1, 0.04],
         "final_spectate_keep_s": 5,   # spectate de fin de game (équipe éliminée) : on garde X s puis coupe
@@ -193,10 +197,17 @@ def _merge(base, over):
 
 def load_config():
     cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["_cfg_v"] = 2
     if CONFIG_PATH.exists():
         user = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         user.pop("video", None)
         user.get("render", {}).pop("output", None)
+        if user.get("_cfg_v", 0) < 2:   # anciens réglages de coupe trop agressifs -> nouveaux
+            ed = user.get("edit", {})
+            for k, old in (("dead_gap_s", 300), ("dead_keep_after_s", 20), ("dead_keep_before_s", 60)):
+                if ed.get(k) == old:
+                    ed.pop(k)
+            user["_cfg_v"] = 2
         _merge(cfg, user)
     else:
         save_config(cfg)
