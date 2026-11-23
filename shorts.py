@@ -196,19 +196,29 @@ def encoder_args():
     return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
 
 
-def render_short(video, m, out, folder, layout="cadre", captions=True, sub=None):
+def render_short(video, m, out, folder, layout="cadre", captions=True, sub=None, cfg=None):
     folder.mkdir(parents=True, exist_ok=True)
     dur = m["end"] - m["start"]
     title_png(headline(m), sub, folder / "title.png")
-    cap = None
-    if captions:
+    cap, wins = None, []
+    rc = (cfg or {}).get("render", {})
+    bleep_on = bool(cfg) and rc.get("bleep_swears", True)
+    if captions or bleep_on:
         try:
-            import transcribe
-            ws = transcribe.words(transcribe.load_audio(video, m["start"], dur))
-            cap = captions_stream(ws, dur, folder) if ws else None
-            print(f"[SHORT] {len(ws)} mot(s) sous-titré(s)", flush=True)
+            import bleep
+            ws = bleep.words_for(cfg, video, [(m["start"], m["end"])], label="SHORT")[(m["start"], m["end"])] \
+                if cfg else __import__("transcribe").words(__import__("transcribe").load_audio(video, m["start"], dur))
+            if bleep_on:
+                extra = bleep.extra_words(rc)
+                wins = bleep.windows(ws, extra)
+                ws = [(a, b, bleep.mask(w) if bleep.is_swear(w, extra) else w) for a, b, w in ws]
+                if wins:
+                    print(f"[SHORT] {len(wins)} gros mot(s) bipé(s)", flush=True)
+            if captions:
+                cap = captions_stream(ws, dur, folder) if ws else None
+                print(f"[SHORT] {len(ws)} mot(s) sous-titré(s)", flush=True)
         except Exception as e:                       # pas de transcription : le Short sort quand même
-            print(f"[SHORT] sous-titres impossibles ({type(e).__name__}: {e}) -> Short sans sous-titres", flush=True)
+            print(f"[SHORT] voix non transcrite ({type(e).__name__}: {e}) -> Short sans sous-titres ni bip", flush=True)
     if layout == "plein":        # gameplay en plein écran (centre de l'image), bords coupés
         base = "[0:v]scale=-2:1920,crop=1080:1920[v1]"
     else:                        # gameplay agrandi au centre + fond flouté
@@ -223,8 +233,13 @@ def render_short(video, m, out, folder, layout="cadre", captions=True, sub=None)
         fc += ";[2:v]fps=30,format=rgba[c];[v2][c]overlay=0:0:eof_action=pass,format=yuv420p[v]"
     else:
         fc += ";[v2]format=yuv420p[v]"
+    amap = "0:a:0?"
+    if wins:
+        import bleep
+        fc += ";" + bleep.audio_filter(wins, src="[0:a:0]", out="[aout]")
+        amap = "[aout]"
     cmd = [need("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", *inputs, "-filter_complex", fc,
-           "-map", "[v]", "-map", "0:a:0?", "-r", "60", *encoder_args(),
+           "-map", "[v]", "-map", amap, "-r", "60", *encoder_args(),
            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{dur:.3f}",
            "-movflags", "+faststart", str(out)]
     r = subprocess.run(cmd, capture_output=True, text=True)
@@ -269,7 +284,7 @@ def run(cfg):
         print(f"[SHORTS] {(i - 1) / len(ms) * 100:.1f}%", flush=True)
         out = out_dir / f"[SHORT] {video.stem} - {i:02d}.mp4"
         render_short(video, m, out, wd / "shorts" / f"{i:02d}", rc.get("shorts_layout", "cadre"),
-                     rc.get("shorts_captions", True), sub)
+                     rc.get("shorts_captions", True), sub, cfg=cfg)
         outs.append(out)
         print(f"[OUTPUT] {out}", flush=True)
     print(f"[OK] {len(outs)} Short(s) dans {out_dir}")

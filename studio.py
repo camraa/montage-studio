@@ -228,7 +228,7 @@ SPEED_RE = re.compile(r"\bx\s*(\d+(?:\.\d+)?)")
 ETA_RE = re.compile(r"reste\s+(~?\s*[\d.]+\s*min|\d+:\d{2}(?::\d{2})?)")
 PARTS_RE = re.compile(r"\((\d+) morceaux, (\d+) en parall")
 STAGES = {"[SCAN]": "Scan", "[RENDU]": "Rendu des games", "[CONCAT]": "Assemblage", "[FINAL]": "Assemblage + musique",
-          "[SHORTS]": "Shorts", "[SRT]": "Sous-titres", ">> Scan": "Scan", ">> Chargement": "Chargement OCR"}
+          "[SHORTS]": "Shorts", "[SRT]": "Sous-titres", "[BIP]": "Bip des gros mots", ">> Scan": "Scan", ">> Chargement": "Chargement OCR"}
 
 
 def _progress_detail(j, line):

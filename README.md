@@ -41,6 +41,9 @@ GitHub Desktop → Clone → `camraa/montage-studio`, puis **STUDIO.bat** (insta
   1080x1920 avec gros titre auto et **sous-titres de ta voix** mot par mot → `Vidéos\Shorts`.
   Tes **réactions au son** (voix qui monte d'un coup) comptent aussi : bonus pour un fight où tu réagis,
   et une grosse réaction sans kill peut devenir un Short. Piste du micro réglable (onglet Rendu → Shorts).
+- **Bip sur les gros mots** (onglet Rendu → Gros mots, activé par défaut) : ta voix est transcrite,
+  chaque gros mot (FR + EN, insultes) est coupé et remplacé par un bip, dans le montage et les Shorts
+  (sous-titres masqués : « p***** »). Mots en plus réglables. Piste du micro : onglet Rendu → Shorts.
 - **Texte YouTube** (touche Y, ou bouton « Texte YouTube » dans la file après un rendu) : 3 titres,
   description avec chapitres détaillés (kills, points / ELO par game), tags — boutons Copier.
   Aussi enregistré dans `<montage>.txt` à côté de la vidéo.
