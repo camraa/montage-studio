@@ -508,7 +508,7 @@ function renderRenderTab() {
     ${field("Précision", `<select data-s="render.whisper_model"><option value="base" ${r.whisper_model === "base" ? "selected" : ""}>Rapide</option><option value="small" ${(r.whisper_model || "small") === "small" ? "selected" : ""}>Conseillée</option><option value="medium" ${r.whisper_model === "medium" ? "selected" : ""}>Max (plus lent)</option></select>`)}
     <h4>Montage auto</h4>
     ${field("Bus coupé (s)", `<input data-s="edit.bus_skip_s" type="number" value="${e.bus_skip_s}">`)}
-    ${field("Creux coupé après (s)", `<input data-s="edit.dead_gap_s" type="number" value="${e.dead_gap_s}">`)}
+    ${field("Creux coupé après (s, 0 = jamais)", `<input data-s="edit.dead_gap_s" type="number" value="${e.dead_gap_s}">`)}
     ${field("Durée des cartons", `<input data-s="render.card_duration_s" type="number" step="0.5" value="${r.card_duration_s}">`)}
     <p class="muted">Les réglages « montage auto » s'appliquent au prochain « Réinitialiser le montage auto ».</p>
     <div style="display:flex;gap:6px;margin-top:10px">

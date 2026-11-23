@@ -12,18 +12,38 @@ import json
 from common import fmt_tc, work_dir
 
 
+def _score(st):
+    if not st or st.get("pct") is None or st.get("level") is None or st["level"] >= 17:
+        return None
+    return st["level"] * 100 + st["pct"]
+
+
+def session_gain_of(first, last, games):
+    """Gain de session = rang de fin - rang de départ (fiable), sinon somme des gains valides."""
+    a, b = _score(first), _score(last)
+    if a is not None and b is not None:
+        return b - a
+    gains = [g["gain"] for g in games if g.get("gain") is not None]
+    return sum(gains) if gains else None
+
+
 def cut_dead_time(start, end, g, ed):
-    """Retire les creux > dead_gap_s entre deux événements (kill ou palier de top)."""
+    """Retire les longs creux (> dead_gap_s) entre deux événements (kill ou palier de top).
+    Jamais dans la fin de partie (dead_protect_end_s), jamais de petite coupe (< dead_min_cut_s)."""
+    gap = ed.get("dead_gap_s") or 0
+    if gap <= 0:                          # 0 = on ne coupe jamais l'intérieur d'une game
+        return [(start, end)]
+    protect = end - ed.get("dead_protect_end_s", 240)
+    min_cut = ed.get("dead_min_cut_s", 90)
     events = sorted([k["t"] for k in g["kills"]] + [x["t"] for x in g.get("tops", [])])
     anchors = [start] + [e for e in events if start < e < end] + [end]
     segs = [[start, end]]
     for a, b in zip(anchors, anchors[1:]):
-        if b - a <= ed["dead_gap_s"]:
+        if b - a <= gap:
             continue
-        cut_a, cut_b = a + ed["dead_keep_after_s"], b - ed["dead_keep_before_s"]
-        if b == end:                      # fin de partie : on garde quand même la mort / le top 1
-            cut_b = end - ed["dead_keep_before_s"]
-        if cut_b - cut_a < 30:
+        cut_a = a + ed["dead_keep_after_s"]
+        cut_b = min(b - ed["dead_keep_before_s"], protect)
+        if cut_b - cut_a < min_cut:
             continue
         last = segs[-1]
         segs[-1] = [last[0], cut_a]
@@ -46,7 +66,6 @@ def build(cfg):
     total = 0.0
     prev = None
     first_rank = next((g["rank_before"] for g in games if g.get("rank_before")), None) if not cup else None
-    session_gain = 0
     for g in games:
         start = g["start"] + ed["bus_skip_s"]
         end = g["end"] + ed["end_tail_s"]
@@ -74,8 +93,6 @@ def build(cfg):
             {"start": round(a, 3), "end": round(b, 3), "start_tc": fmt_tc(a), "end_tc": fmt_tc(b)}
             for a, b in segs]})
         total += kept + cfg["render"]["card_duration_s"]
-        if g.get("gain") is not None:
-            session_gain += g["gain"]
         print(f"  GAME {g['game']:2d}  gardé {kept / 60:4.1f} / {(end - start) / 60:4.1f} min "
               f"({len(segs)} morceau(x))  kills={len(g['kills'])}")
         prev = g
@@ -98,13 +115,13 @@ def build(cfg):
                              "wins": sum(1 for s in sc_ if s[0] > s[1]), "losses": sum(1 for s in sc_ if s[0] < s[1]),
                              "rounds": [sum(s[0] for s in sc_), sum(s[1] for s in sc_)],
                              "rank_start": first_rank, "rank_end": last_rank if cfg.get("mode_rank") else None,
-                             "session_gain": session_gain if any(g.get("gain") is not None for g in games) else None,
+                             "session_gain": session_gain_of(first_rank, last_rank, games) if cfg.get("mode_rank") else None,
                              "last": last}
         else:
             last_rank = next((g["rank_after"] for g in reversed(games) if g.get("rank_after")), None)
             plan["final"] = {"type": "ranked", "label": cfg["mode_label"], "games": len(plan["games"]),
                              "rank_start": first_rank, "rank_end": last_rank,
-                             "session_gain": session_gain if any(g.get("gain") is not None for g in games) else None,
+                             "session_gain": session_gain_of(first_rank, last_rank, games),
                              "last": last}
         total += cfg["render"]["card_duration_s"]
 
