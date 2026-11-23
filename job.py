@@ -30,11 +30,14 @@ def ensure_plan(cfg, force=False):
     return edit.build(cfg)
 
 
+RESUME = False
+
+
 def do_scan(cfg):
     import scan
     from run import migrate_old_scan
     migrate_old_scan(cfg)
-    tl = scan.run(cfg, rescan=FORCE_RESCAN or "--rescan" in sys.argv)
+    tl = scan.run(cfg, rescan=FORCE_RESCAN or "--rescan" in sys.argv, resume=RESUME)
     games = json.loads(Path(tl).read_text(encoding="utf-8")).get("games", [])
     ensure_plan(cfg)
     if not games:
@@ -88,10 +91,12 @@ def main():
             pass
     action, mode, video = sys.argv[1], sys.argv[2], sys.argv[3]
     print(f">> Démarrage : {action} ({mode})", flush=True)
-    global FORCE_RESCAN
+    global FORCE_RESCAN, RESUME
     cfg = make_cfg(mode, video)
     if action == "rescan":
         FORCE_RESCAN, action = True, "scan"
+    if action == "rescan_resume":            # nouveau scan complet interrompu : on le reprend
+        FORCE_RESCAN, RESUME, action = True, True, "scan"
     if action in ("scan", "all"):
         do_scan(cfg)
     if action in ("render", "all"):

@@ -41,6 +41,10 @@ GitHub Desktop → Clone → `camraa/montage-studio`, puis **STUDIO.bat** (insta
   1080x1920 avec gros titre auto et **sous-titres de ta voix** mot par mot → `Vidéos\Shorts`.
   Tes **réactions au son** (voix qui monte d'un coup) comptent aussi : bonus pour un fight où tu réagis,
   et une grosse réaction sans kill peut devenir un Short. Piste du micro réglable (onglet Rendu → Shorts).
+- **Reprise après plantage** : si l'app ou le PC s'arrête pendant une analyse ou un rendu, la tâche apparaît
+  « interrompue » dans la File avec **Reprendre là où ça s'est arrêté** : l'analyse repart de la dernière image lue,
+  le rendu garde les morceaux déjà finis. Le montage final s'écrit sous « (en cours) » et n'est renommé qu'une
+  fois complet : un ancien montage n'est jamais remplacé par une vidéo cassée.
 - **Mode direct** (onglet Progression → Mode direct) : pendant que tu joues, l'app lit ton rang à l'écran au salon
   (sans compte Epic), met à jour la Progression (session « Mode direct » du jour) et un widget pour le live :
   `http://127.0.0.1:8765/live/widget` (source Navigateur / Lien, 400×120). L'app doit rester ouverte.

@@ -96,7 +96,7 @@ def library():
             seen.add(p)
             mode = st["modes"].get(p.stem) or (existing_modes(p.stem) or ["ranked_reload"])[0]
             out_dir = p.parent.parent if raw else p.parent
-            outs = [o.name for o in out_dir.glob(f"[[]PRÉ-UPLOAD[]] {p.stem} - *.mp4")]
+            outs = [o.name for o in out_dir.glob(f"[[]PRÉ-UPLOAD[]] {p.stem} - *.mp4") if "(en cours)" not in o.name]
             wd = WORK_ROOT / f"{safe_stem(p.stem)} [{mode}]"
             vids.append({
                 "path": str(p), "name": p.name, "stem": p.stem, "size": p.stat().st_size,
@@ -227,6 +227,43 @@ def settings_set(data):
 
 # ------------------------------------------------------------------ file d'attente des tâches
 JOBS, QUEUE = [], []
+JOBS_P = DATA_DIR / "jobs.json"
+
+
+def save_jobs():
+    """File des tâches gardée sur le disque : après un plantage, l'app sait ce qui était en cours."""
+    try:
+        with LOCK:
+            keep = [{k: (v[-30:] if k == "log" else v) for k, v in j.items() if k != "pid"} for j in JOBS[-30:]]
+        tmp = JOBS_P.with_suffix(".tmp")
+        tmp.write_text(json.dumps(keep, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(JOBS_P)
+    except Exception:
+        pass
+
+
+def load_jobs():
+    try:
+        old = json.loads(JOBS_P.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    for j in old:
+        if j.get("status") in ("en cours", "en attente"):
+            j["status"] = "interrompu"
+            j["msg"] = "Interrompu : l'app ou le PC s'est arrêté pendant la tâche"
+            j["eta"] = None
+    with LOCK:
+        JOBS[:0] = old
+
+
+def resume_job(jid):
+    with LOCK:
+        old = next((j for j in JOBS if j["id"] == jid), None)
+    if not old:
+        return None
+    old["status"] = "repris"
+    j = add_job("rescan_resume" if old["action"] == "rescan" else old["action"], old["mode"], old["path"])
+    return j
 PCT_RE = re.compile(r"(\d{1,3}(?:\.\d)?)%")
 SCAN_RE = re.compile(r"(\d+)/(\d+)\s+[\d.]+ img/s")
 SPEED_RE = re.compile(r"\bx\s*(\d+(?:\.\d+)?)")
@@ -264,6 +301,7 @@ def add_job(action, mode, path):
     with LOCK:
         JOBS.append(j)
         QUEUE.append(j)
+    save_jobs()
     return j
 
 
@@ -279,6 +317,7 @@ def worker():
         j["status"] = "en cours"
         j["msg"] = "Démarrage…"
         j["t0"] = time.time()
+        save_jobs()
         j["path"] = str(find_video(j["path"]))
         env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
         worker_exe = Path(sys.executable).parent / ("MontageStudioWorker.exe" if os.name == "nt" else "MontageStudioWorker")
@@ -321,6 +360,7 @@ def worker():
         j["status"] = "terminé" if p.returncode == 0 else ("annulé" if j.get("cancel") else "erreur")
         if p.returncode == 0:
             j["pct"] = 100.0
+        save_jobs()
 
 
 def cancel_job(jid):
@@ -483,7 +523,11 @@ class H(BaseHTTPRequestHandler):
                 return self._json(add_job(d["action"], d["mode"], d["path"]))
             if u.path == "/api/job/cancel":
                 cancel_job(d["id"])
+                save_jobs()
                 return self._json({"ok": True})
+            if u.path == "/api/job/resume":
+                j = resume_job(d["id"])
+                return self._json({"ok": bool(j)})
             if u.path == "/api/plan/save":
                 cfg = make_cfg(d["mode"], find_video(d["path"]))
                 plan = d["plan"]
@@ -616,6 +660,7 @@ class H(BaseHTTPRequestHandler):
 
 def start_server(port=PORT):
     """Démarre le serveur (et la file des tâches) ; renvoie (serveur, url). Port libre auto si occupé."""
+    load_jobs()
     threading.Thread(target=worker, daemon=True).start()
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", port), H)
