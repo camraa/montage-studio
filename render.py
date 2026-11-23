@@ -685,7 +685,10 @@ def music_bed(cfg, clips, total, cmd, plan=None):
 
 def write_chapters(cfg, plan, clips, out):
     """Texte YouTube prêt à coller (titres, description avec chapitres exacts, tags) -> <montage>.txt"""
-    import youtube
+    try:
+        import youtube
+    except ImportError as e:
+        return print(f"[YOUTUBE] texte indisponible ({e})")
     t, chapters, final_t = 0.0, [], None
     games = iter(plan["games"])
     for c in clips:
