@@ -21,7 +21,7 @@ import zipfile
 import zipimport
 from pathlib import Path
 
-BASE_VERSION = "1.0.0"          # version du lanceur (l'exe installé)
+BASE_VERSION = "1.1.0"          # version du lanceur (l'exe installé). 1.1.0 : charge les nouveaux modules des MAJ
 APP_MODULES = {"common", "scan", "edit", "render", "run", "job", "thumbs", "studio", "banners", "shorts", "transcribe", "youtube", "voice", "progress", "_version"}
 PREFIX = "MSTUDIO-UPDATE"
 

@@ -36,7 +36,7 @@ jobs:
           GH_TOKEN: ${{ secrets.MAJ_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::Secret MAJ_TOKEN manquant (voir README, section Mises à jour automatiques)"
-            exit 1
+            echo "::warning::Secret MAJ_TOKEN pas encore réglé : rien de publié (voir README, Mises à jour automatiques)"
+            exit 0
           fi
           python publish.py
