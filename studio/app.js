@@ -1108,20 +1108,44 @@ async function syncWindowChrome() {
   const on = !(S.settings && S.settings.ui && S.settings.ui.mac_window === false);
   $("#mac-window-item").classList.toggle("checked", on);
 }
-window.addEventListener("pywebviewready", syncWindowChrome);
+window.addEventListener("pywebviewready", () => {
+  syncWindowChrome();
+  setTimeout(syncWindowChrome, 1500); setTimeout(syncWindowChrome, 4000);   // gestes prêts après l'ouverture
+});
 window.syncWindowChrome = syncWindowChrome;
 window.onWinState = max => document.body.classList.toggle("win-max", !!max);
-$("#titlebar").addEventListener("mousedown", e => {
+// glisser la fenêtre : la page garde le pointeur, Python déplace la fenêtre (aimantation aux bords)
+const DRAG = { on: false, raf: 0, pending: false };
+$("#titlebar").addEventListener("pointerdown", e => {
   if (!NATIVE_DRAG || e.button !== 0) return;
   if (e.target.closest("button, .menu, input, select, a, .titlebar-right, .traffic")) return;
+  const w = winApi(); if (!w || !w.win_drag_start) return;
   e.preventDefault();
-  const w = winApi(); if (w && w.win_drag) w.win_drag();
+  try { $("#titlebar").setPointerCapture(e.pointerId); } catch (x) {}
+  DRAG.on = true; w.win_drag_start();
 });
+$("#titlebar").addEventListener("pointermove", () => {
+  if (!DRAG.on || DRAG.raf) return;
+  DRAG.raf = requestAnimationFrame(() => {           // au plus 1 déplacement par image
+    DRAG.raf = 0;
+    if (DRAG.pending) return;
+    const w = winApi(); if (!w) return;
+    DRAG.pending = true;
+    Promise.resolve(w.win_drag_move()).finally(() => DRAG.pending = false);
+  });
+});
+const dragEnd = e => {
+  if (!DRAG.on) return;
+  DRAG.on = false;
+  try { $("#titlebar").releasePointerCapture(e.pointerId); } catch (x) {}
+  const w = winApi(); if (w && w.win_drag_end) w.win_drag_end();
+};
+$("#titlebar").addEventListener("pointerup", dragEnd);
+$("#titlebar").addEventListener("pointercancel", dragEnd);
 $$(".traffic button").forEach(b => b.addEventListener("click", e => {
   e.stopPropagation(); const w = winApi(); if (w) w["win_" + b.dataset.win]();
 }));
 $("#titlebar").addEventListener("dblclick", e => {
-  if (NATIVE_DRAG) return;                 // géré par Windows (double-clic natif)
   if (e.target.closest("button, .menu, input, select, .titlebar-right")) return;
   const w = winApi(); if (w) w.win_max();
 });
