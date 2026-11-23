@@ -541,6 +541,23 @@ async function startJob(action) {
   pollJobs();
 }
 
+function fmtDur(sec) {
+  if (sec == null) return "";
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return h ? `${h} h ${String(m).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function jobDetail(j) {
+  if (j.status === "en attente") return "";
+  const bits = [];
+  if (j.status === "en cours" && j.stage) bits.push(`<b>${j.stage}</b>`);
+  if (j.status === "en cours" && j.speed) bits.push(`vitesse x${j.speed.toFixed(1)}`);
+  if (j.status === "en cours" && j.eta) bits.push(`reste ${j.eta}`);
+  if (j.elapsed_s != null) bits.push(`${j.status === "en cours" ? "écoulé" : "durée"} ${fmtDur(j.elapsed_s)}`);
+  if (j.status === "en cours" && j.parts) bits.push(j.parts);
+  return bits.length ? `<div class="job-eta">${bits.join(" • ")}</div>` : "";
+}
+
 let lastJobState = {};
 async function pollJobs() {
   try { S.jobs = await api("/api/jobs"); } catch (e) { return; }
@@ -552,6 +569,7 @@ async function pollJobs() {
     <div class="job-top"><span class="job-name">${label[j.action] || j.action} — ${j.name}</span><span class="muted">${j.status}</span></div>
     <div class="bar"><i style="width:${j.pct.toFixed(1)}%"></i></div>
     <div class="job-msg" title="${(j.log || []).slice(-1)[0] || ""}">${j.pct.toFixed(1)}% • ${j.msg || ""}</div>
+    ${jobDetail(j)}
     ${j.status === "en cours" || j.status === "en attente" ? `<button class="btn ghost" data-job="${j.id}">Annuler</button>` : ""}
     ${j.output ? `<button class="btn" data-open="${encodeURIComponent(j.output)}">Ouvrir le montage</button>` : ""}
     ${j.status !== "en attente" ? `<details ${j.status === "erreur" ? "open" : ""}><summary class="muted">Détails</summary><pre style="white-space:pre-wrap;font-size:10px;user-select:text">${(j.log || []).slice(-30).join("\n")}</pre></details>` : ""}
@@ -562,7 +580,8 @@ async function pollJobs() {
   $$("[data-diag]", el).forEach(b => b.onclick = () => { const [p, m] = b.dataset.diag.split("|");
     api("/api/open", { folder: "diag", video: decodeURIComponent(p), mode: m }); });
   const running = S.jobs.find(j => j.status === "en cours");
-  $("#status-right").textContent = running ? `${label[running.action]} : ${running.pct.toFixed(0)}% — ${running.name}` : "";
+  $("#status-right").textContent = running ? `${label[running.action]} : ${running.pct.toFixed(0)}%` +
+    (running.eta ? ` — reste ${running.eta}` : "") + ` — ${running.name}` : "";
   // fin d'une tâche -> rafraîchir
   for (const j of S.jobs) {
     if (lastJobState[j.id] === "en cours" && j.status !== "en cours") {

@@ -216,6 +216,32 @@ def settings_set(data):
 JOBS, QUEUE = [], []
 PCT_RE = re.compile(r"(\d{1,3}(?:\.\d)?)%")
 SCAN_RE = re.compile(r"(\d+)/(\d+)\s+[\d.]+ img/s")
+SPEED_RE = re.compile(r"\bx\s*(\d+(?:\.\d+)?)")
+ETA_RE = re.compile(r"reste\s+(~?\s*[\d.]+\s*min|\d+:\d{2}(?::\d{2})?)")
+PARTS_RE = re.compile(r"\((\d+) morceaux, (\d+) en parall")
+STAGES = {"[SCAN]": "Scan", "[RENDU]": "Rendu des games", "[CONCAT]": "Assemblage", "[FINAL]": "Assemblage + musique",
+          "[SHORTS]": "Shorts", "[SRT]": "Sous-titres", ">> Scan": "Scan", ">> Chargement": "Chargement OCR"}
+
+
+def _progress_detail(j, line):
+    """Vitesse / temps restant / étape, affichés sous la barre du travail."""
+    for k, v in STAGES.items():
+        if line.startswith(k) and j.get("stage") != v:
+            j["stage"] = v
+            for x in ("eta", "speed", "parts"):      # chiffres de l'étape précédente
+                j.pop(x, None)
+    m = ETA_RE.search(line)
+    if m:
+        eta = m.group(1).replace("~", "").strip()
+        if eta.count(":") == 2 and eta.startswith("0:"):
+            eta = eta[2:]
+        j["eta"] = eta
+    m = SPEED_RE.search(line)
+    if m and "%" in line:
+        j["speed"] = float(m.group(1))
+    m = PARTS_RE.search(line)
+    if m:
+        j["parts"] = f"{m.group(1)} morceaux, {m.group(2)} en parallèle"
 
 
 def add_job(action, mode, path):
@@ -239,6 +265,7 @@ def worker():
             continue
         j["status"] = "en cours"
         j["msg"] = "Démarrage…"
+        j["t0"] = time.time()
         j["path"] = str(find_video(j["path"]))
         env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
         worker_exe = Path(sys.executable).parent / ("MontageStudioWorker.exe" if os.name == "nt" else "MontageStudioWorker")
@@ -260,6 +287,7 @@ def worker():
                 line = raw.decode("utf-8", "replace").strip()
                 if not line:
                     continue
+                _progress_detail(j, line)
                 m = SCAN_RE.search(line)
                 if m:
                     j["pct"] = int(m.group(1)) / max(1, int(m.group(2))) * 100
@@ -275,6 +303,8 @@ def worker():
                 if "%" not in line:
                     j["log"] = (j["log"] + [line])[-60:]
         p.wait()
+        j["eta"] = None
+        j["elapsed_s"] = int(time.time() - j["t0"])
         j["status"] = "terminé" if p.returncode == 0 else ("annulé" if j.get("cancel") else "erreur")
         if p.returncode == 0:
             j["pct"] = 100.0
@@ -379,6 +409,10 @@ class H(BaseHTTPRequestHandler):
                 return self._json({"url": furl(pp) if pp.exists() else None})
             if u.path == "/api/jobs":
                 with LOCK:
+                    now = time.time()
+                    for j in JOBS:
+                        if j["status"] == "en cours" and j.get("t0"):
+                            j["elapsed_s"] = int(now - j["t0"])
                     return self._json([{k: v for k, v in j.items() if k != "pid"} for j in JOBS[-30:]])
             if u.path == "/api/music":
                 return self._json(music_list())
