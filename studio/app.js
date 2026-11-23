@@ -590,13 +590,23 @@ function jobDetail(j) {
 }
 
 let lastJobState = {};
+const JOB_OPEN = new Set(), JOB_SHUT = new Set();
+function bindJobButtons(el) {
+  $$("[data-job]", el).forEach(b => b.onclick = () => api("/api/job/cancel", { id: b.dataset.job }).then(pollJobs));
+  $$("[data-yt]", el).forEach(b => b.onclick = () => { const [p, m] = b.dataset.yt.split("|");
+    showYoutube(decodeURIComponent(p), m); });
+  $$("[data-open]", el).forEach(b => b.onclick = () => api("/api/open", { path: decodeURIComponent(b.dataset.open) }));
+  $$("[data-diag]", el).forEach(b => b.onclick = () => { const [p, m] = b.dataset.diag.split("|");
+    api("/api/open", { folder: "diag", video: decodeURIComponent(p), mode: m }); });
+}
+
 async function pollJobs() {
   try { S.jobs = await api("/api/jobs"); } catch (e) { return; }
   const el = $("#tab-queue");
   const active = S.jobs.filter(j => j.status === "en cours" || j.status === "en attente").length;
   $("#queue-badge").textContent = active; $("#queue-badge").classList.toggle("hidden", !active);
   const label = { scan: "Analyse", rescan: "Nouveau scan complet", render: "Rendu", all: "Analyse + rendu", proxy: "Aperçu léger" };
-  el.innerHTML = S.jobs.length ? S.jobs.slice().reverse().map(j => `<div class="job ${j.status === "terminé" ? "done" : j.status === "erreur" ? "err" : ""}">
+  const html = S.jobs.length ? S.jobs.slice().reverse().map(j => `<div class="job ${j.status === "terminé" ? "done" : j.status === "erreur" ? "err" : ""}">
     <div class="job-top"><span class="job-name">${label[j.action] || j.action} — ${j.name}</span><span class="muted">${j.status}</span></div>
     <div class="bar"><i style="width:${j.pct.toFixed(1)}%"></i></div>
     <div class="job-msg" title="${(j.log || []).slice(-1)[0] || ""}">${j.pct.toFixed(1)}% • ${j.msg || ""}</div>
@@ -604,15 +614,27 @@ async function pollJobs() {
     ${j.status === "en cours" || j.status === "en attente" ? `<button class="btn ghost" data-job="${j.id}">Annuler</button>` : ""}
     ${j.output ? `<button class="btn" data-open="${encodeURIComponent(j.output)}">Ouvrir le montage</button>` : ""}
     ${j.output && (j.action === "render" || j.action === "all") && j.status === "terminé" ? `<button class="btn" data-yt="${encodeURIComponent(j.path)}|${j.mode}">Texte YouTube</button>` : ""}
-    ${j.status !== "en attente" ? `<details ${j.status === "erreur" ? "open" : ""}><summary class="muted">Détails</summary><pre style="white-space:pre-wrap;font-size:10px;user-select:text">${(j.log || []).slice(-30).join("\n")}</pre></details>` : ""}
+    ${j.status !== "en attente" ? `<details data-jid="${j.id}" ${JOB_OPEN.has(j.id) || (j.status === "erreur" && !JOB_SHUT.has(j.id)) ? "open" : ""}><summary class="muted">Détails</summary><pre style="white-space:pre-wrap;font-size:10px;user-select:text;max-height:220px;overflow:auto">${esc((j.log || []).slice(-30).join("\n"))}</pre></details>` : ""}
     ${j.status === "erreur" ? `<button class="btn" data-diag="${encodeURIComponent(j.path)}|${j.mode}">Ouvrir le diagnostic</button>` : ""}
     </div>`).join("") : '<p class="muted pad">Aucune tâche.</p>';
-  $$("[data-job]", el).forEach(b => b.onclick = () => api("/api/job/cancel", { id: b.dataset.job }).then(pollJobs));
-  $$("[data-yt]", el).forEach(b => b.onclick = () => { const [p, m] = b.dataset.yt.split("|");
-    showYoutube(decodeURIComponent(p), m); });
-  $$("[data-open]", el).forEach(b => b.onclick = () => api("/api/open", { path: decodeURIComponent(b.dataset.open) }));
-  $$("[data-diag]", el).forEach(b => b.onclick = () => { const [p, m] = b.dataset.diag.split("|");
-    api("/api/open", { folder: "diag", video: decodeURIComponent(p), mode: m }); });
+  // la file est relue chaque seconde : on ne la redessine que si elle a changé, en gardant
+  // « Détails » ouvert/fermé et la position de lecture (avant : « Détails » se refermait tout seul)
+  // pas pendant un clic (sinon le bouton disparaît entre l'appui et le relâchement)
+  if (html !== el._html && !el.querySelector(":active")) {
+    const scroll = el.scrollTop, pres = {};
+    $$("details[data-jid] pre", el).forEach(p => pres[p.parentNode.dataset.jid] =
+      { top: p.scrollTop, bottom: p.scrollTop + p.clientHeight >= p.scrollHeight - 4 });
+    el._html = html;
+    el.innerHTML = html;
+    el.scrollTop = scroll;
+    $$("details[data-jid]", el).forEach(d => {
+      const pre = d.querySelector("pre"), was = pres[d.dataset.jid];
+      if (pre) pre.scrollTop = !was || was.bottom ? pre.scrollHeight : was.top;
+      d.ontoggle = () => { const id = d.dataset.jid;
+        if (d.open) { JOB_OPEN.add(id); JOB_SHUT.delete(id); } else { JOB_OPEN.delete(id); JOB_SHUT.add(id); } };
+    });
+    bindJobButtons(el);
+  }
   const running = S.jobs.find(j => j.status === "en cours");
   $("#status-right").textContent = running ? `${label[running.action]} : ${running.pct.toFixed(0)}%` +
     (running.eta ? ` — reste ${running.eta}` : "") + ` — ${running.name}` : "";
