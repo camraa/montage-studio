@@ -93,6 +93,13 @@ if /i "%~1"=="setup" exit /b 0
 
 rem ---------------------------------------------------------------- studio (interface)
 if /i "%~1"=="studio" (
+  rem l'app complete (fenetre Mac) directement depuis le code : aucun build, juste Pull origin avant
+  "%VPY%" -c "import webview" >nul 2>nul || "%VPY%" -m pip install pywebview >nul
+  "%VPY%" -c "import webview" >nul 2>nul
+  if not errorlevel 1 (
+    "%VPY%" app.py
+    exit /b
+  )
   echo.
   echo Le studio s'ouvre dans ton navigateur : http://127.0.0.1:8765
   echo Laisse cette fenetre ouverte pendant que tu montes ^(la fermer = quitter le studio^).

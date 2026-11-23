@@ -3,7 +3,7 @@
 - Au démarrage, `activate()` charge le code de la mise à jour installée (si elle est saine) AVANT le code
   livré dans l'exe : un « finder » placé en tête de sys.meta_path sert nos modules depuis code.zip.
 - En arrière-plan, `check_async()` lit latest.json sur GitHub Releases, télécharge le paquet (quelques Mo),
-  vérifie l'empreinte SHA-256 + la signature Ed25519 (ta clé privée), puis le décompresse.
+  vérifie qu'il vient de ton dépôt + son empreinte SHA-256, puis le décompresse.
   Il sera actif au prochain lancement (bouton « Redémarrer » dans l'app).
 - Si une nouvelle version plante 2 fois de suite avant d'afficher l'interface -> retour à la précédente.
 """
@@ -22,7 +22,7 @@ import zipimport
 from pathlib import Path
 
 BASE_VERSION = "1.0.0"          # version du lanceur (l'exe installé)
-APP_MODULES = {"common", "scan", "edit", "render", "run", "job", "thumbs", "studio", "banners", "shorts", "transcribe", "youtube", "voice", "progress"}
+APP_MODULES = {"common", "scan", "edit", "render", "run", "job", "thumbs", "studio", "banners", "shorts", "transcribe", "youtube", "voice", "progress", "_version"}
 PREFIX = "MSTUDIO-UPDATE"
 
 
@@ -94,12 +94,19 @@ def latest_url():
 
 # ------------------------------------------------------------------ chargement du code mis à jour
 class _UpdateFinder(importlib.abc.MetaPathFinder):
+    """Sert depuis code.zip tous les modules qu'il contient (un module ajouté dans une mise à jour
+    marche donc sans réinstaller l'app), jamais les bibliothèques (torch, PIL...)."""
     def __init__(self, zpath):
         self.zi = zipimport.zipimporter(str(zpath))
+        with zipfile.ZipFile(zpath) as z:
+            self.names = {n[:-4] for n in z.namelist() if n.endswith(".pyc") and "/" not in n}
 
     def find_spec(self, name, path=None, target=None):
-        if name in APP_MODULES:
-            return self.zi.find_spec(name)
+        if name in self.names or name in APP_MODULES:
+            try:
+                return self.zi.find_spec(name)
+            except Exception:
+                return None
         return None
 
 

@@ -35,3 +35,4 @@ whisper_models/
 rembg_models/
 assets/
 progression.json
+_version.py

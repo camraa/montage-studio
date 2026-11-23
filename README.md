@@ -4,16 +4,18 @@ Montage automatique des recs Fortnite : Cup, Ranked Reload, Ranked Battle Royale
 Arène Box Fight (rang + manches) et Créatif 1v1 (score lu en haut de l'écran).
 
 ## Les fichiers à double-cliquer
-| Fichier | Rôle |
-|---|---|
-| **BUILD_EXE.bat** | Fabrique l'app et l'installateur complet → `dist\MontageStudio_Setup.exe` (+ `.bin`). 1er build : 15-30 min. |
-| **PUBLIER_INSTALLATEUR.bat** | Met l'installateur en ligne et copie le lien pour tes clients : https://github.com/camraa/montage-studio-maj/releases/tag/installateur |
-| **PUBLIER_MAJ.bat** | Envoie une mise à jour (quelques Mo), reçue automatiquement par toutes les apps installées. |
-| **STUDIO.bat** | Lance l'app directement depuis le code, sans build (pour tester tes modifs). |
+| Fichier | Quand | Durée |
+|---|---|---|
+| **STUDIO.bat** | Tester une modif : **Pull origin** puis double-clic. L'app s'ouvre directement depuis le code. | quelques s |
+| **PUBLIER_MAJ.bat** | Envoyer la modif à ton app installée et à tes clients. Aucune question : version et notes automatiques. | ~30 s |
+| **BUILD_EXE.bat** | Seulement quand une nouvelle bibliothèque arrive (je te le dis). `BUILD_EXE.bat clean` = build complet. | 1er build long, ensuite plus court |
+| **PUBLIER_INSTALLATEUR.bat** | Après un BUILD_EXE : fabrique l'installateur et le met en ligne (lien copié) : https://github.com/camraa/montage-studio-maj/releases/tag/installateur | quelques min |
+
+Une mise à jour peut ajouter de nouveaux fichiers de code : pas besoin de réinstaller l'app pour ça.
 
 ## Sur un nouveau PC
-GitHub Desktop → Clone → `camraa/montage-studio`, puis **BUILD_EXE.bat**. Rien d'autre à copier.
-Après des modifs : **Commit** → **Push**, puis **Pull** sur l'autre PC.
+GitHub Desktop → Clone → `camraa/montage-studio`, puis **STUDIO.bat** (installe ce qu'il faut au 1er lancement).
+**BUILD_EXE.bat** seulement si tu veux l'exe sur ce PC.
 
 ## Ce que fait le montage
 - Coupe le salon, le matchmaking, le début du bus, les creux de plus de 5 min sans kill ni palier de top, et le spectate de fin.
