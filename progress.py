@@ -88,6 +88,21 @@ def record(cfg, plan, timeline=None):
         print(f"[PROGRESSION] non enregistrée : {type(e).__name__}: {e}")
 
 
+def upsert(s):
+    """Ajoute / remplace une session déjà construite (ex. Mode direct)."""
+    try:
+        d = _load()
+        old = next((x for x in d["sessions"] if x["id"] == s["id"]), None)
+        if old:
+            s["hidden"] = old.get("hidden", False)
+            d["sessions"].remove(old)
+        d["sessions"].append(s)
+        d["sessions"].sort(key=lambda x: (x["date"], x["rec"]))
+        _save(d)
+    except Exception as e:
+        print(f"[PROGRESSION] non enregistrée : {type(e).__name__}: {e}")
+
+
 def sessions(include_hidden=False):
     return [s for s in _load()["sessions"] if include_hidden or not s.get("hidden")]
 

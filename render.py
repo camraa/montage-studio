@@ -772,6 +772,9 @@ def render(cfg, cpu=False, reencode_final=False):
     info = ffprobe_info(video)
     print(f"[RENDU] source {info['width']}x{info['height']} @ {info['fps']:.0f} fps -> "
           f"sortie {rc['width']}x{rc['height']} @ {rc['fps']} fps, {rc['bitrate']}b/s, encodeur {kind}")
+    if info["height"] < 1080:
+        print(f"[QUALITÉ] ton rec est en {info['height']}p : agrandi en {rc['height']}p il restera flou. Dans OBS : "
+              "Paramètres > Vidéo > Résolution de sortie (mise à l'échelle) = la résolution de base (1920x1080 ou plus).")
     clips_dir = work_dir(cfg) / "clips"
     clips_dir.mkdir(exist_ok=True)
     for old in list(clips_dir.glob("*.mp4")) + list(clips_dir.glob("*.wav")):

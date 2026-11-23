@@ -41,6 +41,9 @@ GitHub Desktop → Clone → `camraa/montage-studio`, puis **STUDIO.bat** (insta
   1080x1920 avec gros titre auto et **sous-titres de ta voix** mot par mot → `Vidéos\Shorts`.
   Tes **réactions au son** (voix qui monte d'un coup) comptent aussi : bonus pour un fight où tu réagis,
   et une grosse réaction sans kill peut devenir un Short. Piste du micro réglable (onglet Rendu → Shorts).
+- **Mode direct** (onglet Progression → Mode direct) : pendant que tu joues, l'app lit ton rang à l'écran au salon
+  (sans compte Epic), met à jour la Progression (session « Mode direct » du jour) et un widget pour le live :
+  `http://127.0.0.1:8765/live/widget` (source Navigateur / Lien, 400×120). L'app doit rester ouverte.
 - **Bip sur les gros mots** (onglet Rendu → Gros mots, activé par défaut) : ta voix est transcrite,
   chaque gros mot (FR + EN, insultes) est coupé et remplacé par un bip, dans le montage et les Shorts
   (sous-titres masqués : « p***** »). Mots en plus réglables. Piste du micro : onglet Rendu → Shorts.

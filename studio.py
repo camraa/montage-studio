@@ -128,6 +128,11 @@ def project(path, mode):
     wd = work_dir(cfg)
     res = {"path": str(p), "mode": mode, "label": cfg["mode_label"], "duration": duration(p, state()),
            "proxy": (wd / "proxy.mp4").exists(), "scanned": (wd / "timeline.json").exists()}
+    try:
+        inf = ffprobe_info(p)
+        res["source"] = {"width": inf["width"], "height": inf["height"], "fps": round(inf["fps"])}
+    except Exception:
+        pass
     if not res["scanned"]:
         return res
     res["timeline"] = json.loads((wd / "timeline.json").read_text(encoding="utf-8"))
@@ -439,6 +444,19 @@ class H(BaseHTTPRequestHandler):
                 return self._json(banners_info(q.get("path"), q.get("mode")))
             if u.path == "/api/progress":
                 return self._json(progress_info())
+            if u.path == "/api/live":
+                import live
+                return self._json(live.state())
+            if u.path == "/live/widget":
+                import live
+                return self._bytes(live.WIDGET_HTML.encode("utf-8"), "text/html; charset=utf-8")
+            if u.path == "/live/font.ttf":
+                f = ASSET_DIR / "polices" / "LuckiestGuy-Regular.ttf"
+                return self._bytes(f.read_bytes(), "font/ttf") if f.exists() else self._json({}, 404)
+            if u.path == "/live/rang.png":
+                import live
+                f = live.LIVE_DIR / "rang.png"
+                return self._bytes(f.read_bytes(), "image/png") if f.exists() else self._json({}, 404)
             if u.path == "/api/youtube":
                 import youtube
                 try:
@@ -476,6 +494,15 @@ class H(BaseHTTPRequestHandler):
                 tl_p = work_dir(cfg) / "timeline.json"
                 progress.record(cfg, plan, json.loads(tl_p.read_text(encoding="utf-8")) if tl_p.exists() else None)
                 return self._json({"ok": True})
+            if u.path == "/api/live/start":
+                import live
+                try:
+                    return self._json(live.start(d.get("mode")))
+                except ValueError as e:
+                    return self._json({"error": str(e)})
+            if u.path == "/api/live/stop":
+                import live
+                return self._json(live.stop_())
             if u.path == "/api/progress/hide":
                 import progress
                 progress.hide(d["id"], d.get("hidden", True))
