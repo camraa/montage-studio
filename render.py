@@ -470,7 +470,7 @@ def render_segment(rc, video, info, seg, out, kind, progress=None, counter=None)
                 _BAD_MODES.add(m)          # inutile de la retenter sur les morceaux suivants
                 print(f"\n[COMPTEUR] méthode « {m} » abandonnée ({ex}) -> essai suivant", flush=True)
         print("\n[COMPTEUR] incrustation impossible sur ce PC -> morceaux rendus sans compteur", flush=True)
-    _log_mode("nocounter", _render_segment(rc, video, info, seg, out, kind, progress))
+    _log_mode("nocounter" if kind == "nvenc" else "cpu", _render_segment(rc, video, info, seg, out, kind, progress))
 
 
 _BAD_MODES = set()
@@ -736,6 +736,29 @@ def counter_data(cfg, plan):
     return out
 
 
+def bleep_windows(cfg, video, clips, jobs):
+    """Fenêtres à biper dans le montage final (gros mots de ta voix, placés sur la timeline finale)."""
+    try:
+        import bleep
+        seg_of = {out: seg for seg, out, _ in jobs}
+        ranges = [(seg["start"], seg["end"]) for seg, _, _ in jobs]
+        allw = bleep.words_for(cfg, video, ranges)
+        extra = bleep.extra_words(cfg["render"])
+        wins, t = [], 0.0
+        for c in clips:
+            d = duration_of(c)
+            seg = seg_of.get(c)
+            if seg:
+                wins += [(a, min(b, t + d)) for a, b in
+                         bleep.windows(allw[(seg["start"], seg["end"])], extra, offset=t) if a < t + d]
+            t += d
+        print(f"[BIP] {len(wins)} gros mot(s) bipé(s)" if wins else "[BIP] aucun gros mot", flush=True)
+        return wins
+    except Exception as e:                    # le montage sort quand même, sans bip
+        print(f"[BIP] impossible ({type(e).__name__}: {e}) -> montage sans bip", flush=True)
+        return []
+
+
 def render(cfg, cpu=False, reencode_final=False):
     from common import detect_encoder
     kind = "x264" if cpu else detect_encoder()
@@ -811,11 +834,19 @@ def render(cfg, cpu=False, reencode_final=False):
     lst.write_text("".join(f"file '{c.as_posix()}'\n" for c in clips), encoding="utf-8")
     total = sum(duration_of(c) for c in clips)
     print(f"[CONCAT] {len(clips)} clips, durée {fmt_tc(total)[:8]}")
+    wins = bleep_windows(cfg, video, clips, jobs) if rc.get("bleep_swears", True) else []
 
     out = resolve(cfg, rc["output"])
     cmd = [need("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y",
            "-f", "concat", "-safe", "0", "-i", lst]
     mix, idx = music_bed(cfg, clips, total, cmd, plan)
+    if wins:                                  # bip sur les gros mots, avant la musique
+        import bleep
+        if mix:
+            mix[-1] = mix[-1].replace("[0:a]", "[vx]", 1)
+            mix.insert(0, bleep.audio_filter(wins, "[0:a]", "[vx]"))
+        else:
+            mix = [bleep.audio_filter(wins, "[0:a]", "[a]")]
     vcodec = video_args(rc, kind) if reencode_final else ["-c:v", "copy"]
     if mix:
         cmd += ["-filter_complex", ";".join(mix), "-map", "0:v", "-map", "[a]", *vcodec, *AUDIO]

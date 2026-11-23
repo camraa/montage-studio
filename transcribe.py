@@ -5,6 +5,7 @@ Le modèle est livré avec l'app (whisper_models/<taille>), sinon téléchargé 
 """
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from common import ASSET_DIR, BUNDLE_DIR, DATA_DIR, load_config, need
@@ -66,8 +67,15 @@ def _silence(sec):
     return np.zeros(int(SR * sec), dtype=np.float32)
 
 
-def load_audio(src, start=0.0, dur=None, concat=False):
-    """Audio mono 16 kHz (float32) d'un fichier, ou d'une liste concat ffmpeg."""
+def release():
+    """Libère le modèle (mémoire de la carte graphique) avant l'encodage."""
+    _MODEL.pop("m", None)
+    import gc
+    gc.collect()
+
+
+def load_audio(src, start=0.0, dur=None, concat=False, track=None):
+    """Audio mono 16 kHz (float32) d'un fichier, ou d'une liste concat ffmpeg (track = n° de piste audio)."""
     import numpy as np
     cmd = [need("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin"]
     if concat:
@@ -77,8 +85,10 @@ def load_audio(src, start=0.0, dur=None, concat=False):
     cmd += ["-i", str(src)]
     if dur:
         cmd += ["-t", f"{dur:.3f}"]
+    if track is not None:
+        cmd += ["-map", f"0:a:{track}?"]
     cmd += ["-vn", "-ac", "1", "-ar", str(SR), "-f", "f32le", "-"]
-    raw = subprocess.run(cmd, capture_output=True).stdout
+    raw = subprocess.run(cmd, capture_output=True, **({"creationflags": 0x08000000} if sys.platform == "win32" else {})).stdout
     return np.frombuffer(raw, dtype=np.float32).copy()
 
 

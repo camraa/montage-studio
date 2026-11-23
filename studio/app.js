@@ -505,6 +505,9 @@ function renderRenderTab() {
     ${field("Réactions", `<label class="switch"><input data-s="render.shorts_voice" type="checkbox" ${r.shorts_voice !== false ? "checked" : ""}><i></i><span>tes réactions au son comptent comme moments forts</span></label>`)}
     ${field("Piste du micro", `<select data-s="render.voice_track">${[-1, 0, 1, 2, 3, 4, 5].map(n => `<option value="${n}" ${Number(r.voice_track ?? -1) === n ? "selected" : ""}>${n < 0 ? "Même piste que le montage" : "Piste " + (n + 1) + (n === 1 ? " (micro seul dans OBS, souvent)" : "")}</option>`).join("")}</select>`)}
     <button class="btn" data-cmd="shorts" style="margin:4px 0 0 136px">Créer les Shorts</button>
+    <h4>Gros mots</h4>
+    ${field("Bip", `<label class="switch"><input data-s="render.bleep_swears" type="checkbox" ${r.bleep_swears !== false ? "checked" : ""}><i></i><span>gros mots de ta voix remplacés par un bip (montage + Shorts)</span></label>`)}
+    ${field("Mots en plus", `<input data-s="render.bleep_extra" type="text" placeholder="ex : wesh, frérot" value="${esc(r.bleep_extra || "")}">`)}
     <h4>Sous-titres YouTube</h4>
     ${field("Fichier .srt", `<label class="switch"><input data-s="render.subtitles_srt" type="checkbox" ${r.subtitles_srt ? "checked" : ""}><i></i><span>à côté du montage</span></label>`)}
     ${field("Précision", `<select data-s="render.whisper_model"><option value="base" ${r.whisper_model === "base" ? "selected" : ""}>Rapide</option><option value="small" ${(r.whisper_model || "small") === "small" ? "selected" : ""}>Conseillée</option><option value="medium" ${r.whisper_model === "medium" ? "selected" : ""}>Max (plus lent)</option></select>`)}
