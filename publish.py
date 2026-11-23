@@ -126,6 +126,8 @@ Les mises à jour arrivent ensuite toutes seules dans l'app.
 
 
 def ensure_repo(repo):
+    if repo.endswith("/montage-studio"):        # dépôt du code lui-même (public) : existe forcément
+        return
     if gh("repo", "view", repo, check=False).returncode != 0:
         print(f"[GITHUB] création du dépôt public {repo} (il ne contiendra que l'installateur et les mises à jour)")
         gh("repo", "create", repo, "--public", "--add-readme", "--description", "Téléchargement et mises à jour de Montage Studio")

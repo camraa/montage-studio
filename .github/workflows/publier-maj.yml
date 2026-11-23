@@ -1,8 +1,7 @@
 # Publie automatiquement une mise à jour de Montage Studio à chaque envoi sur main.
-# Les apps installées (toi + tes clients) la récupèrent toutes seules depuis camraa/montage-studio-maj.
+# Les apps installées (toi + tes clients) la récupèrent toutes seules depuis les Releases de ce dépôt (public).
 # Pour envoyer du code SANS publier : mets [no-maj] dans le message du commit.
-# Secret requis (une seule fois) : MAJ_TOKEN = jeton GitHub avec Contents en lecture/écriture
-# sur le dépôt public des mises à jour (voir README).
+# Aucun jeton à régler : le jeton intégré de GitHub Actions suffit (même dépôt).
 name: Publier la mise à jour
 
 on:
@@ -22,6 +21,9 @@ concurrency:
   group: publier-maj
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
   publier:
     if: "!contains(github.event.head_commit.message, '[no-maj]')"
@@ -33,10 +35,5 @@ jobs:
           python-version: "3.12"          # même Python que l'exe : les .pyc doivent correspondre
       - name: Publier
         env:
-          GH_TOKEN: ${{ secrets.MAJ_TOKEN }}
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::Secret MAJ_TOKEN pas encore réglé : rien de publié (voir README, Mises à jour automatiques)"
-            exit 0
-          fi
-          python publish.py
+          GH_TOKEN: ${{ github.token }}
+        run: python publish.py
